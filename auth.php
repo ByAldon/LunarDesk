@@ -15,7 +15,7 @@ session_set_cookie_params([
 
 session_start();
 
-$app_version = "v1.1.9";
+$app_version = "v1.1.11";
 $dbPath = __DIR__ . '/data.db';
 
 try {
