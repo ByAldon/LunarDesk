@@ -2,7 +2,7 @@
 // index.php
 session_start();
 
-$app_version = "v1.0.3";
+$app_version = "v1.0.5";
 
 $dbPath = __DIR__ . '/data.db';
 $db = new PDO("sqlite:$dbPath");
@@ -208,9 +208,9 @@ if (empty($_SESSION['logged_in'])) {
                         <div class="flex-1 overflow-y-auto p-2 space-y-1">
                             <div v-if="rooms.length === 0" class="text-xs text-slate-600 italic text-center mt-4">No channels yet.</div>
                             <div v-for="room in rooms" :key="room.id" 
-                                @click="selectRoom(room)"
-                                class="px-3 py-2 rounded-md cursor-pointer text-sm flex justify-between items-center group transition"
-                                :class="activeRoom?.id === room.id ? 'bg-blue-600/20 text-blue-400 font-bold' : 'text-slate-400 hover:bg-slate-800'">
+                                 @click="selectRoom(room)"
+                                 class="px-3 py-2 rounded-md cursor-pointer text-sm flex justify-between items-center group transition"
+                                 :class="activeRoom?.id === room.id ? 'bg-blue-600/20 text-blue-400 font-bold' : 'text-slate-400 hover:bg-slate-800'">
                                 <span class="truncate flex items-center gap-2">
                                     <span class="text-slate-600 font-normal">#</span> {{ room.title }}
                                 </span>
@@ -352,13 +352,31 @@ if (empty($_SESSION['logged_in'])) {
 
                     <div v-show="showCellMenu" 
                          @click.stop
-                         class="absolute z-50 bg-slate-800 border border-slate-600 shadow-xl rounded-md p-2 flex items-center gap-3 transition-opacity duration-200"
+                         class="floating-menu absolute z-50 bg-slate-800 border border-slate-600 shadow-xl rounded-md px-3 py-2 flex items-center gap-2 transition-opacity duration-200"
                          :style="{ top: cellMenuTop + 'px', left: cellMenuLeft + 'px' }">
-                        <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Cell BG:</span>
-                        <input type="color" v-model="activeCellColor" @input="applyCellColor" class="w-6 h-6 cursor-pointer rounded bg-transparent border-0 p-0">
+                        
+                        <button @click="setCellColor('')" class="w-5 h-5 rounded-full border border-slate-500 flex items-center justify-center hover:bg-slate-700 transition" title="Clear Color">
+                            <span class="text-slate-300 text-sm leading-none mt-[-2px]">&times;</span>
+                        </button>
+                        
+                        <div class="w-px h-4 bg-slate-600 mx-1"></div>
+                        
+                        <button @click="setCellColor('#4c1d95')" class="w-5 h-5 rounded-full hover:scale-110 transition bg-[#4c1d95] shadow-inner" title="Purple"></button>
+                        <button @click="setCellColor('#14532d')" class="w-5 h-5 rounded-full hover:scale-110 transition bg-[#14532d] shadow-inner" title="Green"></button>
+                        <button @click="setCellColor('#1e3a8a')" class="w-5 h-5 rounded-full hover:scale-110 transition bg-[#1e3a8a] shadow-inner" title="Blue"></button>
+                        <button @click="setCellColor('#7f1d1d')" class="w-5 h-5 rounded-full hover:scale-110 transition bg-[#7f1d1d] shadow-inner" title="Red"></button>
+                        <button @click="setCellColor('#78350f')" class="w-5 h-5 rounded-full hover:scale-110 transition bg-[#78350f] shadow-inner" title="Amber"></button>
+                        <button @click="setCellColor('#334155')" class="w-5 h-5 rounded-full hover:scale-110 transition bg-[#334155] shadow-inner" title="Grey Light"></button>
+                        <button @click="setCellColor('#1e293b')" class="w-5 h-5 rounded-full hover:scale-110 transition bg-[#1e293b] shadow-inner" title="Grey Dark"></button>
+                        
+                        <div class="w-px h-4 bg-slate-600 mx-1"></div>
+
+                        <label class="w-5 h-5 rounded-full border border-slate-500 overflow-hidden cursor-pointer flex items-center justify-center hover:scale-110 transition relative" title="Custom Color">
+                            <input type="color" v-model="activeCellColor" @input="applyCellColor" class="absolute -inset-2 w-10 h-10 cursor-pointer p-0 m-0 border-0 bg-transparent">
+                        </label>
                     </div>
 
-                    <div class="flex-1 p-8 overflow-y-auto w-full h-full relative" id="editor-wrapper" onclick="if(event.target.id === 'editor-wrapper') focusEditor()">
+                    <div class="flex-1 p-8 overflow-y-auto w-full h-full relative" id="editor-wrapper">
                         <div id="editorjs" class="w-full"></div>
                     </div>
                 </template>
@@ -410,10 +428,6 @@ if (empty($_SESSION['logged_in'])) {
     <script>
         let globalEditorInstance = null;
 
-        function focusEditor() {
-            if (globalEditorInstance) globalEditorInstance.focus();
-        }
-
         const { createApp } = Vue;
         createApp({
             data() {
@@ -463,27 +477,30 @@ if (empty($_SESSION['logged_in'])) {
                 const updateActiveCell = (e) => {
                     if (!e.target || !e.target.closest) return;
                     const cell = e.target.closest('.tc-cell');
+                    
                     if (cell) {
                         window.currentActiveCell = cell;
                         const bg = window.getComputedStyle(cell).backgroundColor;
                         this.activeCellColor = this.rgbToHex(bg);
+                        
+                        // Zoek de wrapper dynamisch (omdat hij met v-if wordt ingeladen)
                         const wrapper = document.getElementById('editor-wrapper');
-                        const wrapperRect = wrapper.getBoundingClientRect();
-                        const cellRect = cell.getBoundingClientRect();
-                        this.cellMenuTop = cellRect.top - wrapperRect.top + wrapper.scrollTop - 45;
-                        this.cellMenuLeft = cellRect.left - wrapperRect.left + wrapper.scrollLeft;
-                        this.showCellMenu = true;
-                    } else {
+                        if (wrapper) {
+                            const wrapperRect = wrapper.getBoundingClientRect();
+                            const cellRect = cell.getBoundingClientRect();
+                            this.cellMenuTop = cellRect.top - wrapperRect.top + wrapper.scrollTop - 45;
+                            this.cellMenuLeft = cellRect.left - wrapperRect.left + wrapper.scrollLeft;
+                            this.showCellMenu = true;
+                        }
+                    } else if (!e.target.closest('.floating-menu')) {
                         this.showCellMenu = false;
                         window.currentActiveCell = null;
                     }
                 };
 
-                const wrapper = document.getElementById('editor-wrapper');
-                if(wrapper) {
-                    wrapper.addEventListener('click', updateActiveCell);
-                    wrapper.addEventListener('keyup', updateActiveCell);
-                }
+                // Luister naar het gehele document in plaats van de nog niet ingeladen wrapper
+                document.addEventListener('click', updateActiveCell);
+                document.addEventListener('keyup', updateActiveCell);
             },
             methods: {
                 linkify(text) {
@@ -492,6 +509,14 @@ if (empty($_SESSION['logged_in'])) {
                     return text.replace(urlRegex, (url) => {
                         return `<a href="${url}" target="_blank" class="chat-link">${url}</a>`;
                     });
+                },
+
+                setCellColor(color) {
+                    if (window.currentActiveCell) {
+                        window.currentActiveCell.style.backgroundColor = color;
+                        this.activeCellColor = color || '#1e293b';
+                        this.needsSave = true;
+                    }
                 },
 
                 applyCellColor(event) {
