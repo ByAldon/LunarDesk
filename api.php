@@ -15,54 +15,119 @@ try {
     $db = new PDO("sqlite:$dbPath");
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-    // Automatische schema updates voor oudere versies
-    try { $db->exec("ALTER TABLE items ADD COLUMN cover_image TEXT DEFAULT ''"); } catch(Exception $e) {}
-    try { $db->exec("ALTER TABLE items ADD COLUMN draft_cover_image TEXT DEFAULT ''"); } catch(Exception $e) {}
-
-    // Volledige tabel aanmaken als deze nog niet bestaat
-    $db->exec("CREATE TABLE IF NOT EXISTS items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        parent_id INTEGER DEFAULT NULL,
-        title TEXT NOT NULL,
-        content TEXT DEFAULT '',
-        cover_image TEXT DEFAULT '',
-        draft_title TEXT,
-        draft_content TEXT,
-        draft_cover_image TEXT DEFAULT '',
-        has_draft INTEGER DEFAULT 0,
-        type TEXT DEFAULT 'page',
-        is_public INTEGER DEFAULT 0,
-        slug TEXT UNIQUE,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )");
-
-    $db->exec("CREATE TABLE IF NOT EXISTS rooms (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, webhook_key TEXT UNIQUE, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
-    $db->exec("CREATE TABLE IF NOT EXISTS webhook_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, room_id INTEGER NOT NULL, sender TEXT NOT NULL, content TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
-    $db->exec("CREATE TABLE IF NOT EXISTS admin_terminal (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT NOT NULL, content TEXT NOT NULL, colorClass TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    // Fallback voor oudere sessies die nog geen ID of Role hebben vastgelegd
+    if (empty($_SESSION['user_id']) && !empty($_SESSION['username'])) {
+        $stmt = $db->prepare("SELECT id, role FROM users WHERE username = ?");
+        $stmt->execute([$_SESSION['username']]);
+        $u = $stmt->fetch();
+        if ($u) {
+            $_SESSION['user_id'] = $u['id'];
+            $_SESSION['role'] = $u['role'] ?: 'admin';
+            if (!$u['role']) { // Maak de eerste fallback user automatisch admin
+                $db->prepare("UPDATE users SET role = 'admin' WHERE id = ?")->execute([$u['id']]);
+            }
+        }
+    }
 
     $method = $_SERVER['REQUEST_METHOD'];
     $action = $_GET['action'] ?? '';
     $input = json_decode(file_get_contents('php://input'), true);
 
-    // --- UPLOAD ROUTE (Voor banners EN editor plaatjes) ---
-    if ($action === 'upload') {
-        if (!is_dir(__DIR__ . '/uploads')) {
-            mkdir(__DIR__ . '/uploads', 0755, true);
+    // --- PROFIEL INSTELLINGEN ---
+    if ($action === 'profile') {
+        if ($method === 'GET') {
+            $stmt = $db->prepare("SELECT id, username, email, nickname, role FROM users WHERE id = :id");
+            $stmt->execute([':id' => $_SESSION['user_id']]);
+            echo json_encode($stmt->fetch(PDO::FETCH_ASSOC));
+        } elseif ($method === 'PUT') {
+            $updatePass = !empty($input['password']);
+            $sql = "UPDATE users SET nickname = :nickname, email = :email";
+            $params = [':nickname' => $input['nickname'], ':email' => $input['email'], ':id' => $_SESSION['user_id']];
+            
+            if ($updatePass) {
+                $sql .= ", password_hash = :pass";
+                $params[':pass'] = password_hash($input['password'], PASSWORD_DEFAULT);
+            }
+            $sql .= " WHERE id = :id";
+            $db->prepare($sql)->execute($params);
+            echo json_encode(['success' => true]);
         }
-        
+        exit;
+    }
+
+    // --- GEBRUIKERS BEHEER (Alleen Admin) ---
+    if ($action === 'users') {
+        if ($_SESSION['role'] !== 'admin') {
+            http_response_code(403);
+            echo json_encode(['error' => 'Forbidden']);
+            exit;
+        }
+
+        if ($method === 'GET') {
+            $stmt = $db->query("SELECT id, username, email, nickname, role FROM users ORDER BY id ASC");
+            echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+        } elseif ($method === 'POST') {
+            $hash = password_hash($input['password'], PASSWORD_DEFAULT);
+            $stmt = $db->prepare("INSERT INTO users (username, password_hash, email, nickname, role) VALUES (:username, :pass, :email, :nickname, :role)");
+            $stmt->execute([
+                ':username' => $input['username'],
+                ':pass' => $hash,
+                ':email' => $input['email'],
+                ':nickname' => $input['nickname'],
+                ':role' => $input['role']
+            ]);
+            
+            // Automatisch Email Sturen
+            $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
+            $baseUrl = $protocol . "://" . $_SERVER['HTTP_HOST'] . strtok($_SERVER["REQUEST_URI"], '?') . "?portal=open";
+            
+            $to = $input['email'];
+            $subject = "Access to LunarDesk";
+            $msg = "Hello " . $input['nickname'] . ",\n\nYou have been granted access to LunarDesk.\n\nUsername: " . $input['username'] . "\nPassword: " . $input['password'] . "\n\nLogin securely here: " . $baseUrl;
+            $headers = "From: noreply@" . $_SERVER['HTTP_HOST'];
+            
+            @mail($to, $subject, $msg, $headers); // @ onderdrukt falen in omgevingen zonder mail configuratie
+
+            echo json_encode(['success' => true]);
+        } elseif ($method === 'PUT') {
+            $updatePass = !empty($input['password']);
+            $sql = "UPDATE users SET username = :username, nickname = :nickname, email = :email, role = :role";
+            $params = [
+                ':username' => $input['username'],
+                ':nickname' => $input['nickname'],
+                ':email' => $input['email'],
+                ':role' => $input['role'],
+                ':id' => $input['id']
+            ];
+            if ($updatePass) {
+                $sql .= ", password_hash = :pass";
+                $params[':pass'] = password_hash($input['password'], PASSWORD_DEFAULT);
+            }
+            $sql .= " WHERE id = :id";
+            $db->prepare($sql)->execute($params);
+            echo json_encode(['success' => true]);
+        } elseif ($method === 'DELETE' && isset($_GET['id'])) {
+            if ($_GET['id'] == $_SESSION['user_id']) {
+                echo json_encode(['success' => false, 'error' => 'Cannot delete yourself']);
+                exit;
+            }
+            $db->prepare("DELETE FROM users WHERE id = :id")->execute([':id' => $_GET['id']]);
+            echo json_encode(['success' => true]);
+        }
+        exit;
+    }
+
+    // --- UPLOAD ROUTE ---
+    if ($action === 'upload') {
+        if (!is_dir(__DIR__ . '/uploads')) { mkdir(__DIR__ . '/uploads', 0755, true); }
         $file = $_FILES['image'] ?? null;
         if ($file && $file['error'] === UPLOAD_ERR_OK) {
             $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
-            // Genereer een veilige, unieke bestandsnaam
             $filename = uniqid() . '.' . preg_replace('/[^a-zA-Z0-9]/', '', strtolower($ext));
             $destination = __DIR__ . '/uploads/' . $filename;
             
             if (move_uploaded_file($file['tmp_name'], $destination)) {
-                // Editor.js verwacht deze specifieke JSON output
-                echo json_encode([
-                    'success' => 1,
-                    'file' => ['url' => 'uploads/' . $filename]
-                ]);
+                echo json_encode(['success' => 1, 'file' => ['url' => 'uploads/' . $filename]]);
             } else {
                 echo json_encode(['success' => 0, 'error' => 'Kan bestand niet verplaatsen.']);
             }

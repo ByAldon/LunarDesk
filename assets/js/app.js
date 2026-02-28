@@ -9,6 +9,7 @@ const { createApp } = Vue;
 createApp({
     data() {
         return {
+            currentUser: null,
             items: [],
             activePage: null,
             loading: false,
@@ -33,12 +34,20 @@ createApp({
             showSettingsModal: false,
             settingsRoom: null,
 
-            // Variabelen voor de custom prompt popup
             showPromptModal: false,
             promptTitle: '',
             promptInput: '',
             promptAction: null,
             promptPayload: null,
+
+            // Account & User Management Modals
+            showProfileModal: false,
+            profileForm: { username: '', email: '', nickname: '', password: '' },
+
+            showUsersModal: false,
+            userList: [],
+            editingUser: false,
+            userForm: { id: null, username: '', email: '', nickname: '', password: '', role: 'user' },
 
             showCellMenu: false,
             cellMenuTop: 0,
@@ -50,6 +59,7 @@ createApp({
         spaces() { return this.items.filter(i => i.type === 'space'); }
     },
     mounted() { 
+        this.fetchProfile();
         this.fetchData(); 
         this.fetchRooms();
         this.fetchTerminal();
@@ -93,6 +103,61 @@ createApp({
         }, true);
     },
     methods: {
+        // --- ACCOUNT & USER MANAGEMENT FUNCTIES ---
+        async fetchProfile() {
+            try {
+                const res = await fetch('api.php?action=profile');
+                this.currentUser = await res.json();
+                this.profileForm = { ...this.currentUser, password: '' };
+            } catch(e) {}
+        },
+        async updateProfile() {
+            this.loading = true;
+            await fetch('api.php?action=profile', { method: 'PUT', body: JSON.stringify(this.profileForm) });
+            this.showProfileModal = false;
+            await this.fetchProfile();
+            this.loading = false;
+        },
+        async openUsersModal() {
+            this.showUsersModal = true;
+            await this.fetchUsers();
+            this.resetUserForm();
+        },
+        async fetchUsers() {
+            const res = await fetch('api.php?action=users');
+            this.userList = await res.json();
+        },
+        resetUserForm() {
+            this.editingUser = false;
+            this.userForm = { id: null, username: '', email: '', nickname: '', password: '', role: 'user' };
+        },
+        editUser(user) {
+            this.editingUser = true;
+            this.userForm = { ...user, password: '' };
+        },
+        cancelEditUser() {
+            this.resetUserForm();
+        },
+        async saveUser() {
+            this.loading = true;
+            if (this.editingUser) {
+                await fetch('api.php?action=users', { method: 'PUT', body: JSON.stringify(this.userForm) });
+            } else {
+                await fetch('api.php?action=users', { method: 'POST', body: JSON.stringify(this.userForm) });
+                alert("Gebruiker aangemaakt en uitnodiging verzonden!");
+            }
+            await this.fetchUsers();
+            this.resetUserForm();
+            this.loading = false;
+        },
+        async deleteUser(id) {
+            if (!confirm("Are you sure you want to delete this user permanently?")) return;
+            this.loading = true;
+            await fetch(`api.php?action=users&id=${id}`, { method: 'DELETE' });
+            await this.fetchUsers();
+            this.loading = false;
+        },
+
         linkify(text) {
             if(!text) return '';
             const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -242,7 +307,6 @@ createApp({
             this.rooms = await res.json();
         },
 
-        // VERNIEUWD: Opent de custom prompt modal voor een kanaal
         createRoom() {
             this.promptTitle = "Channel name?";
             this.promptInput = "";
@@ -468,7 +532,6 @@ createApp({
             });
         },
 
-        // VERNIEUWD: Opent de custom prompt modal voor een Space of Pagina
         createItem(type, parentId = null) {
             this.promptTitle = type === 'space' ? "Space Name?" : "Page Name?";
             this.promptInput = "";
@@ -480,7 +543,6 @@ createApp({
             });
         },
 
-        // VERNIEUWD: Verwerkt de invoer van de custom prompt modal
         async submitPrompt() {
             const title = this.promptInput.trim();
             if (!title) return;

@@ -3,7 +3,7 @@
 require_once 'auth.php';
 
 // Version update
-$app_version = "v1.1.1";
+$app_version = "v1.1.4";
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -47,7 +47,8 @@ $app_version = "v1.1.1";
                 <span class="font-black text-white uppercase tracking-widest text-sm">LunarDesk</span>
             </div>
             <div class="flex items-center gap-4">
-                <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest hidden sm:inline-block">Admin Session Active</span>
+                <button v-if="currentUser" @click="showProfileModal = true" class="text-[10px] text-slate-400 hover:text-white font-bold uppercase tracking-widest hidden sm:inline-block transition" title="My Profile">{{ currentUser.nickname || currentUser.username }}</button>
+                <button v-if="currentUser?.role === 'admin'" @click="openUsersModal" class="bg-blue-600/20 hover:bg-blue-500 text-blue-400 hover:text-white border border-blue-700/50 px-3 py-1.5 rounded transition text-[10px] font-bold uppercase tracking-widest">Users</button>
                 <a href="?action=logout" class="bg-slate-800 hover:bg-red-600/20 text-red-400 hover:text-red-300 border border-slate-700 hover:border-red-500/50 px-3 py-1.5 rounded transition text-[10px] font-bold uppercase tracking-widest">Logout</a>
             </div>
         </header>
@@ -168,11 +169,6 @@ $app_version = "v1.1.1";
                                 </li>
                             </ul>
                         </div>
-                    </div>
-
-                    <div class="mt-auto pt-4 border-t border-slate-800 text-center shrink-0">
-                        <span class="text-[10px] text-slate-600 uppercase tracking-widest font-bold">
-                        </span>
                     </div>
                 </div>
             </aside>
@@ -306,6 +302,93 @@ $app_version = "v1.1.1";
                         <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded text-sm font-bold transition shadow-lg">Confirm</button>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <div v-if="showProfileModal" class="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center backdrop-blur-sm">
+            <div class="bg-slate-900 p-6 rounded-xl border border-slate-700 w-full max-w-sm shadow-2xl">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold text-white flex items-center gap-2">My Profile</h2>
+                    <button @click="showProfileModal = false" class="text-slate-500 hover:text-white text-xl leading-none">&times;</button>
+                </div>
+                
+                <form @submit.prevent="updateProfile" class="space-y-4">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Username</label>
+                        <input type="text" v-model="profileForm.username" disabled class="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-slate-500 outline-none cursor-not-allowed">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Display Name</label>
+                        <input type="text" v-model="profileForm.nickname" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-white outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Email</label>
+                        <input type="email" v-model="profileForm.email" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-white outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">New Password (Optional)</label>
+                        <input type="password" v-model="profileForm.password" placeholder="Leave blank to keep current" class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-white outline-none focus:border-blue-500">
+                    </div>
+                    
+                    <div class="pt-4 flex justify-end">
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded text-xs font-bold transition shadow-lg">Save Profile</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div v-if="showUsersModal" class="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center backdrop-blur-sm">
+            <div class="bg-slate-900 p-6 rounded-xl border border-slate-700 w-full max-w-3xl shadow-2xl flex flex-col max-h-[90vh]">
+                <div class="flex justify-between items-center mb-6 shrink-0">
+                    <h2 class="text-xl font-bold text-white flex items-center gap-2">Manage Users</h2>
+                    <button @click="showUsersModal = false" class="text-slate-500 hover:text-white text-xl leading-none">&times;</button>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto mb-4 border border-slate-800 rounded bg-slate-950 p-2">
+                    <table class="w-full text-left text-xs text-slate-300">
+                        <thead>
+                            <tr class="border-b border-slate-800 uppercase text-slate-500 font-bold">
+                                <th class="p-2">Username</th>
+                                <th class="p-2">Display Name</th>
+                                <th class="p-2">Email</th>
+                                <th class="p-2">Role</th>
+                                <th class="p-2 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="user in userList" :key="user.id" class="border-b border-slate-800/50 hover:bg-slate-900/50 transition">
+                                <td class="p-2">{{ user.username }}</td>
+                                <td class="p-2">{{ user.nickname }}</td>
+                                <td class="p-2">{{ user.email }}</td>
+                                <td class="p-2">
+                                    <span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase" :class="user.role === 'admin' ? 'bg-purple-900/50 text-purple-400 border border-purple-800' : 'bg-slate-800 text-slate-400 border border-slate-700'">{{ user.role }}</span>
+                                </td>
+                                <td class="p-2 flex justify-end gap-3">
+                                    <button @click="editUser(user)" class="text-blue-400 hover:text-blue-300 font-bold">Edit</button>
+                                    <button @click="deleteUser(user.id)" class="text-red-400 hover:text-red-300 font-bold" v-if="user.id !== currentUser.id">Delete</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg shrink-0">
+                    <h3 class="text-sm font-bold text-white mb-3">{{ editingUser ? 'Edit User' : 'Add New User' }}</h3>
+                    <form @submit.prevent="saveUser" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <input type="text" v-model="userForm.username" placeholder="Username (Login)" required class="bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white outline-none focus:border-blue-500">
+                        <input type="email" v-model="userForm.email" placeholder="Email" required class="bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white outline-none focus:border-blue-500">
+                        <input type="text" v-model="userForm.nickname" placeholder="Display Name" required class="bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white outline-none focus:border-blue-500">
+                        <input type="password" v-model="userForm.password" :placeholder="editingUser ? 'New Password (leave blank to keep)' : 'Password'" :required="!editingUser" class="bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white outline-none focus:border-blue-500">
+                        <select v-model="userForm.role" class="bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white outline-none focus:border-blue-500">
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                        <div class="flex justify-end gap-2 items-center">
+                            <button type="button" v-if="editingUser" @click="cancelEditUser" class="text-slate-400 hover:text-white text-xs px-3">Cancel</button>
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-xs font-bold transition w-full">{{ editingUser ? 'Update User' : 'Create & Invite' }}</button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
 
