@@ -1,7 +1,7 @@
 <?php
 // index.php
 require_once 'auth.php';
-$app_version = "v1.2.8-beta";
+$app_version = "v1.3.3-beta";
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -11,6 +11,9 @@ $app_version = "v1.2.8-beta";
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%232563eb' rx='115'/><path d='M 350 256 A 110 110 0 1 1 220 140 A 130 130 0 0 0 350 256 Z' fill='%2393c5fd' opacity='0.9'/><path d='M 190 170 V 330 H 310' fill='none' stroke='%23ffffff' stroke-width='48' stroke-linecap='round' stroke-linejoin='round'/></svg>">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/editorjs@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/header@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/checklist@latest"></script>
@@ -120,7 +123,11 @@ $app_version = "v1.2.8-beta";
                 <template v-if="activePage">
                     <header class="relative border-b border-slate-800 flex flex-col justify-end shrink-0 transition-all duration-300" :class="hasCover(activePage) ? 'h-64' : 'h-28 bg-slate-900'" :style="getCoverStyle(activePage)">
                         <div v-if="hasCover(activePage)" class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/50 to-transparent z-0"></div>
-                        <div class="absolute top-4 right-4 z-20 flex gap-2"><input type="file" id="coverUpload" accept="image/*" class="hidden" @change="handleCoverUpload"><button @click="triggerCoverUpload" class="bg-slate-900/80 hover:bg-slate-800 text-white px-3 py-1.5 rounded text-xs font-bold transition shadow-lg backdrop-blur-md border border-slate-700"><span v-if="hasCover(activePage)">Change Banner</span><span v-else>+ Add Banner</span></button></div>
+                        <div class="absolute top-4 right-4 z-20 flex gap-2">
+                            <input type="file" id="coverUpload" accept="image/*" class="hidden" @change="handleCoverUpload">
+                            <button v-if="hasCover(activePage)" @click="removeCover" class="bg-red-900/80 hover:bg-red-800 text-white px-3 py-1.5 rounded text-xs font-bold transition shadow-lg backdrop-blur-md border border-red-700">Remove Banner</button>
+                            <button @click="triggerCoverUpload" class="bg-slate-900/80 hover:bg-slate-800 text-white px-3 py-1.5 rounded text-xs font-bold transition shadow-lg backdrop-blur-md border border-slate-700"><span v-if="hasCover(activePage)">Change Banner</span><span v-else>+ Add Banner</span></button>
+                        </div>
                         <div class="relative z-10 p-6 pb-4 flex justify-between items-end w-full mt-auto">
                             <div class="w-full"><input v-model="activePage.title" placeholder="Page Title..." class="text-3xl font-black bg-transparent text-white outline-none w-full min-w-[100px] drop-shadow-md placeholder-slate-500"></div>
                             <div class="flex items-center space-x-4 shrink-0 mb-1 ml-4"><span v-if="lastSaveTime" class="text-[11px] text-slate-300 italic mr-2 whitespace-nowrap drop-shadow-md font-bold">Draft saved: {{ lastSaveTime }}</span><label class="flex items-center text-xs text-slate-300 gap-2 cursor-pointer hover:text-white drop-shadow-md font-bold"><span>Public:</span><input type="checkbox" v-model="activePage.is_public" :true-value="1" :false-value="0" class="accent-blue-600 shadow-lg"></label><button @click="manualPublish" class="bg-green-600 text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-green-500 transition shadow-lg">Publish</button><button @click="deleteItem(activePage.id, 'page')" class="text-red-400 text-xs font-bold hover:underline transition drop-shadow-md">Delete</button></div>
@@ -134,6 +141,7 @@ $app_version = "v1.2.8-beta";
             </main>
         </div>
         <footer class="bg-slate-900 border-t border-slate-800 p-3 px-6 shrink-0 flex items-center justify-between z-30 shadow-inner"><span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">LunarDesk &copy; <?php echo date('Y'); ?></span><span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Version <?php echo $app_version; ?></span></footer>
+        
         <div v-if="showSettingsModal" class="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center backdrop-blur-sm"><div class="bg-slate-900 p-6 rounded-xl border border-slate-700 w-full max-w-lg shadow-2xl">
             <h2 class="text-xl font-bold text-white mb-6">#{{ settingsRoom.title }} Settings</h2>
             <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg mb-6"><label class="block text-xs font-bold text-slate-400 uppercase mb-3">Webhook URL</label>
@@ -141,10 +149,28 @@ $app_version = "v1.2.8-beta";
             <button v-else @click="generateWebhook" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-xs font-bold w-full">Generate URL</button></div>
             <div class="border-t border-slate-800 pt-4 flex justify-between mt-8"><button @click="deleteRoom" class="text-red-500 text-xs font-bold">Delete Channel</button><button @click="showSettingsModal = false" class="bg-slate-800 border border-slate-700 text-white px-6 py-2 rounded text-sm font-bold">Done</button></div>
         </div></div>
+
         <div v-if="showPromptModal" class="fixed inset-0 z-[150] bg-black/80 flex items-center justify-center backdrop-blur-sm"><div class="bg-slate-900 p-6 rounded-xl border border-slate-700 w-full max-w-sm shadow-2xl">
             <h2 class="text-lg font-bold text-white mb-4">{{ promptTitle }}</h2>
             <form @submit.prevent="submitPrompt"><input type="text" v-model="promptInput" ref="promptInputRef" class="w-full bg-slate-950 border border-slate-700 rounded p-3 text-sm text-white outline-none mb-6" required placeholder="Name..."><div class="flex justify-end gap-3"><button type="button" @click="showPromptModal = false" class="text-slate-400 px-4 py-2 text-sm">Cancel</button><button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded text-sm font-bold shadow-lg">Confirm</button></div></form>
         </div></div>
+
+        <div v-if="showCropModal" class="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div class="bg-slate-900 rounded-xl border border-slate-700 w-full max-w-4xl flex flex-col shadow-2xl overflow-hidden">
+                <div class="p-4 border-b border-slate-800 flex justify-between items-center">
+                    <h2 class="text-lg font-bold text-white">Crop & Position Banner</h2>
+                    <button @click="cancelCrop" class="text-slate-400 hover:text-white font-bold text-xl">✕</button>
+                </div>
+                <div class="p-4 bg-slate-950 flex justify-center items-center" style="max-height: 60vh;">
+                    <img id="cropImage" :src="cropImageSrc" class="max-w-full max-h-full block">
+                </div>
+                <div class="p-4 border-t border-slate-800 flex justify-end gap-3">
+                    <button @click="cancelCrop" class="text-slate-400 px-4 py-2 text-sm font-bold">Cancel</button>
+                    <button @click="applyCrop" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded text-sm font-bold shadow-lg">Apply & Upload</button>
+                </div>
+            </div>
+        </div>
+
     </div>
     <script src="assets/js/app.js"></script>
 </body>

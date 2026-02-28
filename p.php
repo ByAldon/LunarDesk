@@ -1,6 +1,6 @@
 <?php
 // p.php - Public Viewer
-$app_version = "v1.3.0-beta";
+$app_version = "v1.3.3-beta";
 $dbPath = __DIR__ . '/data.db';
 $slug = $_GET['s'] ?? '';
 

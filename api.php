@@ -10,7 +10,7 @@ if (empty($_SESSION['logged_in'])) {
 }
 
 $dbPath = __DIR__ . '/data.db';
-$app_version = "v1.2.8-beta";
+$app_version = "v1.3.3-beta";
 
 try {
     $db = new PDO("sqlite:$dbPath");
@@ -30,6 +30,43 @@ try {
     $method = $_SERVER['REQUEST_METHOD'];
     $action = $_GET['action'] ?? '';
     $input = json_decode(file_get_contents('php://input'), true) ?? [];
+
+    // --- UPLOAD ---
+    if ($action === 'upload') {
+        if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
+            echo json_encode(['success' => 0, 'error' => 'No file uploaded or upload error.']);
+            exit;
+        }
+
+        $uploadDir = __DIR__ . '/uploads/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+
+        $fileInfo = pathinfo($_FILES['image']['name']);
+        $ext = strtolower($fileInfo['extension']);
+        $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
+        
+        if (!in_array($ext, $allowed)) {
+            echo json_encode(['success' => 0, 'error' => 'Invalid file type.']);
+            exit;
+        }
+
+        $newFileName = uniqid('img_') . '.' . $ext;
+        $targetFile = $uploadDir . $newFileName;
+
+        if (move_uploaded_file($_FILES['image']['tmp_name'], $targetFile)) {
+            echo json_encode([
+                'success' => 1,
+                'file' => [
+                    'url' => 'uploads/' . $newFileName
+                ]
+            ]);
+        } else {
+            echo json_encode(['success' => 0, 'error' => 'Failed to move uploaded file.']);
+        }
+        exit;
+    }
 
     // --- PROFIEL ---
     if ($action === 'profile') {

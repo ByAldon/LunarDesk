@@ -52,7 +52,12 @@ createApp({
             showCellMenu: false,
             cellMenuTop: 0,
             cellMenuLeft: 0,
-            activeCellColor: '#1e293b'
+            activeCellColor: '#1e293b',
+
+            // Cropper
+            showCropModal: false,
+            cropImageSrc: '',
+            cropperInstance: null
         }
     },
     computed: {
@@ -407,33 +412,84 @@ createApp({
         triggerCoverUpload() {
             document.getElementById('coverUpload').click();
         },
-        async handleCoverUpload(e) {
+        
+        // CROPPER LOGICA START
+        handleCoverUpload(e) {
             const file = e.target.files[0];
             if (!file) return;
             
-            const formData = new FormData();
-            formData.append('image', file);
-            
-            this.loading = true;
-            try {
-                const res = await fetch('api.php?action=upload', {
-                    method: 'POST',
-                    body: formData
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                this.cropImageSrc = event.target.result;
+                this.showCropModal = true;
+                this.$nextTick(() => {
+                    this.initCropper();
                 });
-                const data = await res.json();
-                if (data.success && data.file && data.file.url) {
-                    this.activePage.cover_image = data.file.url;
-                    this.needsSave = true;
-                } else {
-                    alert("Upload failed.");
-                }
-            } catch(err) {
-                console.error(err);
-                alert("Upload error.");
-            }
-            this.loading = false;
+            };
+            reader.readAsDataURL(file);
             e.target.value = ''; 
         },
+        initCropper() {
+            const image = document.getElementById('cropImage');
+            if (this.cropperInstance) {
+                this.cropperInstance.destroy();
+            }
+            this.cropperInstance = new Cropper(image, {
+                aspectRatio: 21 / 9, 
+                viewMode: 1,
+                dragMode: 'move',
+                autoCropArea: 1,
+                restore: false,
+                guides: true,
+                center: true,
+                highlight: false,
+                cropBoxMovable: true,
+                cropBoxResizable: true,
+                toggleDragModeOnDblclick: false,
+            });
+        },
+        cancelCrop() {
+            this.showCropModal = false;
+            if (this.cropperInstance) {
+                this.cropperInstance.destroy();
+                this.cropperInstance = null;
+            }
+            this.cropImageSrc = '';
+        },
+        async applyCrop() {
+            if (!this.cropperInstance) return;
+            this.loading = true;
+            
+            this.cropperInstance.getCroppedCanvas({
+                width: 1920,
+                imageSmoothingEnabled: true,
+                imageSmoothingQuality: 'high',
+            }).toBlob(async (blob) => {
+                const formData = new FormData();
+                formData.append('image', blob, 'banner.jpg');
+                
+                try {
+                    const res = await fetch('api.php?action=upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await res.json();
+                    if (data.success && data.file && data.file.url) {
+                        this.activePage.cover_image = data.file.url;
+                        this.needsSave = true;
+                        this.cancelCrop();
+                    } else {
+                        alert("Upload failed.");
+                    }
+                } catch(err) {
+                    console.error(err);
+                    alert("Upload error.");
+                }
+                this.loading = false;
+            }, 'image/jpeg', 0.85);
+        },
+        // CROPPER LOGICA EIND
+
         removeCover() {
             this.activePage.cover_image = '';
             this.needsSave = true;
