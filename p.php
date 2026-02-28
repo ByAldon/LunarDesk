@@ -1,6 +1,6 @@
 <?php
 // p.php - Public Viewer
-$app_version = "v1.3.3-beta";
+$app_version = "v1.3.7-beta";
 $dbPath = __DIR__ . '/data.db';
 $slug = $_GET['s'] ?? '';
 
@@ -137,7 +137,9 @@ try {
         </main>
         
         <footer class="bg-slate-900 border-t border-slate-800 p-4 text-center mt-auto shrink-0">
-            <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Powered by LunarDesk <?php echo $app_version; ?></span>
+            <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                Powered by LunarDesk <?php echo $app_version; ?> &bull; Made by <a href="https://github.com/ByAldon" target="_blank" class="text-blue-400 hover:text-blue-300 transition">Aldon</a>
+            </span>
         </footer>
     </div>
 

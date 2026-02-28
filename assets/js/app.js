@@ -54,10 +54,12 @@ createApp({
             cellMenuLeft: 0,
             activeCellColor: '#1e293b',
 
-            // Cropper
+            // Cropper & Beta Notice
             showCropModal: false,
             cropImageSrc: '',
-            cropperInstance: null
+            cropperInstance: null,
+            
+            showBetaNotice: false
         }
     },
     computed: {
@@ -68,6 +70,10 @@ createApp({
         this.fetchData(); 
         this.fetchRooms();
         this.fetchTerminal();
+        
+        if (!localStorage.getItem('lunardesk_beta_dismissed')) {
+            this.showBetaNotice = true;
+        }
         
         setInterval(() => {
             this.silentAutoSave();
@@ -108,6 +114,11 @@ createApp({
         }, true);
     },
     methods: {
+        dismissBetaNotice() {
+            this.showBetaNotice = false;
+            localStorage.setItem('lunardesk_beta_dismissed', '1');
+        },
+        
         // --- ACCOUNT & USER MANAGEMENT FUNCTIES ---
         async fetchProfile() {
             try {
@@ -491,9 +502,11 @@ createApp({
         // CROPPER LOGICA EIND
 
         removeCover() {
+            if (!confirm("Are you sure you want to remove the banner?")) return;
             this.activePage.cover_image = '';
             this.needsSave = true;
         },
+        
         hasCover(page) {
             return page.cover_image && page.cover_image !== '';
         },

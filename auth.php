@@ -6,7 +6,7 @@ if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') { ini_set('session.c
 session_set_cookie_params(['samesite' => 'Lax', 'httponly' => true, 'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on']);
 session_start();
 
-$app_version = "v1.3.3-beta";
+$app_version = "v1.3.7-beta";
 $dbPath = __DIR__ . '/data.db';
 
 try {

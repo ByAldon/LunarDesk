@@ -1,7 +1,7 @@
 <?php
 // index.php
 require_once 'auth.php';
-$app_version = "v1.3.3-beta";
+$app_version = "v1.3.7-beta";
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -140,8 +140,28 @@ $app_version = "v1.3.3-beta";
                 <div v-else class="flex-1 flex items-center justify-center text-slate-600 italic">Select or create a page.</div>
             </main>
         </div>
-        <footer class="bg-slate-900 border-t border-slate-800 p-3 px-6 shrink-0 flex items-center justify-between z-30 shadow-inner"><span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">LunarDesk &copy; <?php echo date('Y'); ?></span><span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Version <?php echo $app_version; ?></span></footer>
+        <footer class="bg-slate-900 border-t border-slate-800 p-3 px-6 shrink-0 flex items-center justify-between z-30 shadow-inner">
+            <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                LunarDesk &copy; <?php echo date('Y'); ?> &bull; Made by <a href="https://github.com/ByAldon" target="_blank" class="text-blue-400 hover:text-blue-300 transition">Aldon</a>
+            </span>
+            <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Version <?php echo $app_version; ?></span>
+        </footer>
         
+        <div v-if="showBetaNotice" class="fixed inset-0 z-[300] bg-black/80 flex items-center justify-center backdrop-blur-sm p-4">
+            <div class="bg-slate-900 p-6 rounded-xl border border-slate-700 w-full max-w-md shadow-2xl relative">
+                <h2 class="text-xl font-bold text-amber-500 mb-4 flex items-center gap-2"><span>🚧</span> System in Beta</h2>
+                <p class="text-sm text-slate-300 mb-6 leading-relaxed">
+                    Welcome to LunarDesk! This system is currently in its beta phase. This means that bugs or unexpected errors may still occur.<br><br>
+                    <strong class="text-red-400 font-bold">⚠️ Warning:</strong> As long as this project is in beta, it is highly recommended not to use it for critical or production work. Always keep a local backup of your data, as the system might fail unexpectedly, or the database (data.db) may need to be reset during future updates.<br><br>
+                    Found a bug or have a suggestion for improvement? You can easily report it via our GitHub repository:
+                    <a href="https://github.com/ByAldon/LunarDesk/issues" target="_blank" class="text-blue-400 hover:underline block mt-3 font-mono text-xs break-all bg-slate-950 p-2 rounded border border-slate-800">https://github.com/ByAldon/LunarDesk/issues</a>
+                </p>
+                <div class="flex justify-end">
+                    <button @click="dismissBetaNotice" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded text-sm font-bold shadow-lg transition">I understand</button>
+                </div>
+            </div>
+        </div>
+
         <div v-if="showSettingsModal" class="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center backdrop-blur-sm"><div class="bg-slate-900 p-6 rounded-xl border border-slate-700 w-full max-w-lg shadow-2xl">
             <h2 class="text-xl font-bold text-white mb-6">#{{ settingsRoom.title }} Settings</h2>
             <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg mb-6"><label class="block text-xs font-bold text-slate-400 uppercase mb-3">Webhook URL</label>

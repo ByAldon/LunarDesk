@@ -10,7 +10,7 @@ if (empty($_SESSION['logged_in'])) {
 }
 
 $dbPath = __DIR__ . '/data.db';
-$app_version = "v1.3.3-beta";
+$app_version = "v1.3.7-beta";
 
 try {
     $db = new PDO("sqlite:$dbPath");

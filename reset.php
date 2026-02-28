@@ -1,6 +1,6 @@
 <?php
 // reset.php
-$app_version = "v1.3.3-beta";
+$app_version = "v1.3.7-beta";
 $dbPath = __DIR__ . '/data.db';
 $token = $_GET['token'] ?? '';
 
