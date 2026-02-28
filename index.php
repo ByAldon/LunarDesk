@@ -3,13 +3,15 @@
 require_once 'auth.php';
 
 // Version update
-$app_version = "v1.0.7";
+$app_version = "v1.0.9";
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>LunarDesk <?php echo $app_version; ?></title>
+    
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%232563eb' rx='115'/><path d='M 350 256 A 110 110 0 1 1 220 140 A 130 130 0 0 0 350 256 Z' fill='%2393c5fd' opacity='0.9'/><path d='M 190 170 V 330 H 310' fill='none' stroke='%23ffffff' stroke-width='48' stroke-linecap='round' stroke-linejoin='round'/></svg>">
     
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -36,7 +38,11 @@ $app_version = "v1.0.7";
         
         <header class="bg-slate-900 border-b border-slate-800 h-14 shrink-0 flex items-center justify-between px-6 shadow-sm z-30">
             <div class="flex items-center gap-3">
-                <div class="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white font-black text-lg shadow-md">L</div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-8 h-8 shadow-md rounded-lg">
+                    <rect width="512" height="512" fill="#2563eb"/>
+                    <path d="M 350 256 A 110 110 0 1 1 220 140 A 130 130 0 0 0 350 256 Z" fill="#93c5fd" opacity="0.9"/>
+                    <path d="M 190 170 V 330 H 310" fill="none" stroke="#ffffff" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
                 <span class="font-black text-white uppercase tracking-widest text-sm">LunarDesk</span>
             </div>
             <div class="flex items-center gap-4">
@@ -161,6 +167,11 @@ $app_version = "v1.0.7";
                                 </li>
                             </ul>
                         </div>
+                    </div>
+
+                    <div class="mt-auto pt-4 border-t border-slate-800 text-center shrink-0">
+                        <span class="text-[10px] text-slate-600 uppercase tracking-widest font-bold">
+                        </span>
                     </div>
                 </div>
             </aside>
