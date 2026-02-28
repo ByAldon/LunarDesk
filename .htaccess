@@ -1,0 +1,8 @@
+# .htaccess
+# Blokkeer directe toegang tot de SQLite database en documentatie bestanden
+<FilesMatch "\.(db|sqlite|sqlite3|md|json)$">
+    Require all denied
+</FilesMatch>
+
+# Voorkom dat bezoekers de inhoud van de map kunnen zien (directory listing)
+Options -Indexes

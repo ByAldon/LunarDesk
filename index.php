@@ -1,7 +1,7 @@
 <?php
 // index.php
 require_once 'auth.php';
-$app_version = "v1.2.5";
+$app_version = "v1.2.8-beta";
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -85,13 +85,30 @@ $app_version = "v1.2.5";
                     <button @click="createItem('space')" class="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded text-sm mb-4 transition shadow-lg shrink-0">+ New Space</button>
                     <div class="flex-1 overflow-y-auto">
                         <div v-for="space in spaces" :key="space.id" class="mb-4">
-                            <div class="flex justify-between items-center group mb-2 pr-2"><span class="text-xs font-bold text-slate-500 uppercase truncate">{{ space.title }}</span>
-                                <div class="hidden group-hover:flex items-center space-x-1 shrink-0"><button @click="createItem('page', space.id)" class="bg-slate-800 text-blue-400 border border-slate-700 rounded px-2 py-1 text-[10px] font-bold shadow-sm">+</button><button @click="deleteItem(space.id, 'space')" class="bg-slate-800 text-red-400 border border-slate-700 rounded px-2 py-1 text-[10px] shadow-sm">🗑️</button></div>
+                            <div class="flex justify-between items-center group mb-2 pr-2">
+                                <span class="text-xs font-bold text-slate-500 uppercase truncate">{{ space.title }}</span>
+                                <div class="hidden group-hover:flex items-center space-x-1 shrink-0">
+                                    <button @click="createItem('page', space.id)" class="bg-slate-800 text-blue-400 border border-slate-700 rounded px-2 py-1 text-[10px] font-bold shadow-sm">+</button>
+                                    <button @click="deleteItem(space.id, 'space')" class="bg-slate-800 text-red-400 border border-slate-700 rounded px-2 py-1 text-[10px] shadow-sm">🗑️</button>
+                                </div>
                             </div>
                             <ul class="mt-1 space-y-1 border-l border-slate-700 ml-1">
-                                <li v-for="page in getPages(space.id)" :key="page.id" @click="selectDoc(page)" class="pl-3 py-1.5 text-sm cursor-pointer hover:bg-slate-800 hover:text-white rounded transition flex items-center justify-between" :class="{'bg-slate-800 text-blue-400 font-bold': activePage?.id == page.id}">
-                                    <span class="truncate">{{ page.has_draft ? page.draft_title : page.title }}</span><span v-if="page.is_public == 1" class="ml-2 text-[9px] bg-green-900/50 text-green-400 border border-green-800 px-1.5 py-0.5 rounded">PUB</span>
-                                </li>
+                                <template v-for="page in getPages(space.id)" :key="page.id">
+                                    <li @click="selectDoc(page)" class="pl-3 py-1.5 text-sm cursor-pointer hover:bg-slate-800 hover:text-white rounded transition flex items-center justify-between group" :class="{'bg-slate-800 text-blue-400 font-bold': activePage?.id == page.id}">
+                                        <div class="flex items-center truncate">
+                                            <span class="truncate">{{ page.has_draft ? page.draft_title : page.title }}</span>
+                                            <span v-if="page.is_public == 1" class="ml-2 text-[9px] bg-green-900/50 text-green-400 border border-green-800 px-1.5 py-0.5 rounded">PUB</span>
+                                        </div>
+                                        <button @click.stop="createItem('subpage', page.id)" class="hidden group-hover:flex items-center justify-center text-slate-400 hover:text-blue-400 text-2xl font-black px-2 pb-1 leading-none transition-transform hover:scale-110" title="Create Subpage">+</button>
+                                    </li>
+                                    <li v-for="subpage in getSubpages(page.id)" :key="subpage.id" @click="selectDoc(subpage)" class="pl-6 py-1.5 text-xs cursor-pointer hover:bg-slate-800 hover:text-white rounded transition flex items-center justify-between" :class="{'bg-slate-800 text-blue-400 font-bold': activePage?.id == subpage.id}">
+                                        <div class="flex items-center truncate text-slate-400">
+                                            <span class="mr-2 opacity-50">↳</span>
+                                            <span class="truncate">{{ subpage.has_draft ? subpage.draft_title : subpage.title }}</span>
+                                            <span v-if="subpage.is_public == 1" class="ml-2 text-[9px] bg-green-900/50 text-green-400 border border-green-800 px-1.5 py-0.5 rounded">PUB</span>
+                                        </div>
+                                    </li>
+                                </template>
                             </ul>
                         </div>
                     </div>
@@ -110,7 +127,7 @@ $app_version = "v1.2.5";
                         </div>
                     </header>
                     <div class="bg-slate-900 border-b border-slate-800 p-2 px-6 flex justify-between items-center text-xs shrink-0 shadow-inner"><span class="text-slate-400 truncate"><span class="text-blue-400 font-bold">ℹ️ Info:</span> Banner or Image tool with /.</span><span v-if="activePage.has_draft == 1" class="text-amber-500 font-bold animate-pulse uppercase tracking-wider text-[10px] ml-4 shrink-0">Unpublished Draft</span></div>
-                    <div v-if="activePage.is_public == 1" class="bg-blue-900/20 text-[11px] text-blue-300 border-b border-slate-800 p-2 px-6 shrink-0"><span class="truncate">Public Link: <a :href="'p.php?s=' + activePage.slug" target="_blank" class="text-blue-400 underline font-mono">p.php?s={{ activePage.slug }}</a></span></div>
+                    <div v-if="activePage.is_public == 1" class="bg-blue-900/20 text-[11px] text-blue-300 border-b border-slate-800 p-2 px-6 shrink-0"><span class="truncate">Public: <a :href="'p.php?s=' + activePage.slug" target="_blank" class="text-blue-400 underline font-mono">p.php?s={{ activePage.slug }}</a></span></div>
                     <div class="flex-1 p-8 overflow-y-auto w-full h-full relative" id="editor-wrapper" onclick="if(event.target.id === 'editor-wrapper') focusEditor()"><div id="editorjs" class="w-full"></div></div>
                 </template>
                 <div v-else class="flex-1 flex items-center justify-center text-slate-600 italic">Select or create a page.</div>
@@ -127,16 +144,6 @@ $app_version = "v1.2.5";
         <div v-if="showPromptModal" class="fixed inset-0 z-[150] bg-black/80 flex items-center justify-center backdrop-blur-sm"><div class="bg-slate-900 p-6 rounded-xl border border-slate-700 w-full max-w-sm shadow-2xl">
             <h2 class="text-lg font-bold text-white mb-4">{{ promptTitle }}</h2>
             <form @submit.prevent="submitPrompt"><input type="text" v-model="promptInput" ref="promptInputRef" class="w-full bg-slate-950 border border-slate-700 rounded p-3 text-sm text-white outline-none mb-6" required placeholder="Name..."><div class="flex justify-end gap-3"><button type="button" @click="showPromptModal = false" class="text-slate-400 px-4 py-2 text-sm">Cancel</button><button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded text-sm font-bold shadow-lg">Confirm</button></div></form>
-        </div></div>
-        <div v-if="showProfileModal" class="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center backdrop-blur-sm"><div class="bg-slate-900 p-6 rounded-xl border border-slate-700 w-full max-w-sm shadow-2xl">
-            <h2 class="text-xl font-bold text-white mb-6">Profile Settings</h2>
-            <form @submit.prevent="updateProfile" class="space-y-4">
-                <input type="text" v-model="profileForm.nickname" placeholder="Display Name" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white outline-none">
-                <input type="email" v-model="profileForm.email" placeholder="Email" required class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white outline-none">
-                <input type="password" v-model="profileForm.password" placeholder="New Password (optional)" class="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white outline-none">
-                <button type="submit" class="w-full bg-blue-600 p-2 rounded font-bold">Save</button>
-            </form>
-            <button @click="showProfileModal = false" class="text-xs text-slate-500 mt-4 block w-full text-center">Close</button>
         </div></div>
     </div>
     <script src="assets/js/app.js"></script>

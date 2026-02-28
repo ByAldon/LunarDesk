@@ -190,6 +190,8 @@ createApp({
         },
 
         extractCellColors(outputData) {
+            if (!outputData || !outputData.blocks) return outputData;
+            
             const tableBlocks = document.querySelectorAll('.ce-block .tc-table');
             let tableIndex = 0;
             outputData.blocks.forEach(block => {
@@ -355,7 +357,7 @@ createApp({
             const data = await res.json();
             if(data.success) {
                 this.settingsRoom.webhook_key = data.key;
-                await this.fetchRooms();
+                this.fetchRooms();
             }
         },
         async deleteWebhook() {
@@ -400,6 +402,7 @@ createApp({
         },
 
         getPages(spaceId) { return this.items.filter(i => i.type === 'page' && i.parent_id == spaceId); },
+        getSubpages(pageId) { return this.items.filter(i => i.type === 'subpage' && i.parent_id == pageId); },
 
         triggerCoverUpload() {
             document.getElementById('coverUpload').click();
@@ -533,7 +536,14 @@ createApp({
         },
 
         createItem(type, parentId = null) {
-            this.promptTitle = type === 'space' ? "Space Name?" : "Page Name?";
+            if (type === 'space') {
+                this.promptTitle = "Space Name?";
+            } else if (type === 'page') {
+                this.promptTitle = "Page Name?";
+            } else if (type === 'subpage') {
+                this.promptTitle = "Subpage Name?";
+            }
+
             this.promptInput = "";
             this.promptAction = 'createItem';
             this.promptPayload = { type, parentId };
@@ -591,7 +601,9 @@ createApp({
                             this.items[index].draft_content = outputStr;
                             this.items[index].draft_cover_image = this.activePage.cover_image;
                         }
-                    } catch (e) { }
+                    } catch (e) { 
+                        console.error("AutoSave Error:", e);
+                    }
                 }
             }
         },
@@ -613,9 +625,13 @@ createApp({
                     this.lastSaveTime = this.getFormattedDateTime();
                     this.needsSave = false; 
                     this.activePage.has_draft = 0; 
-                } catch (e) { }
+                } catch (e) { 
+                    console.error("Publish Error:", e);
+                    alert("Er ging iets mis bij het publiceren! Controleer de developer console.");
+                }
             }
             await this.fetchData(); 
+            this.loading = false;
         },
 
         async deleteItem(id, type) {

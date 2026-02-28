@@ -10,13 +10,13 @@ if (empty($_SESSION['logged_in'])) {
 }
 
 $dbPath = __DIR__ . '/data.db';
-$app_version = "v1.2.5";
+$app_version = "v1.2.8-beta";
 
 try {
     $db = new PDO("sqlite:$dbPath");
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-    // Fallback voor sessie data
+    // Fallback voor sessies
     if (empty($_SESSION['user_id']) && !empty($_SESSION['username'])) {
         $stmt = $db->prepare("SELECT id, role FROM users WHERE username = ?");
         $stmt->execute([$_SESSION['username']]);
@@ -53,7 +53,10 @@ try {
 
     // --- USERS (Admin Only) ---
     if ($action === 'users') {
-        if ($_SESSION['role'] !== 'admin') { http_response_code(403); exit; }
+        if ($_SESSION['role'] !== 'admin') {
+            http_response_code(403);
+            exit;
+        }
         if ($method === 'GET') {
             echo json_encode($db->query("SELECT id, username, email, nickname, role FROM users")->fetchAll(PDO::FETCH_ASSOC));
         } elseif ($method === 'POST') {
@@ -61,12 +64,8 @@ try {
             $stmt->execute([$input['username'], password_hash($input['password'], PASSWORD_DEFAULT), $input['email'], $input['nickname'], $input['role']]);
             echo json_encode(['success' => true]);
         } elseif ($method === 'DELETE' && isset($_GET['id'])) {
-            if ($_GET['id'] != $_SESSION['user_id']) {
-                $db->prepare("DELETE FROM users WHERE id = ?")->execute([$_GET['id']]);
-                echo json_encode(['success' => true]);
-            } else {
-                echo json_encode(['success' => false, 'error' => 'Cannot delete yourself']);
-            }
+            $db->prepare("DELETE FROM users WHERE id = ?")->execute([$_GET['id']]);
+            echo json_encode(['success' => true]);
         }
         exit;
     }
@@ -121,7 +120,7 @@ try {
         case 'POST':
             $baseSlug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $input['title'])));
             $slug = $baseSlug . '-' . rand(1000, 9999);
-            $stmt = $db->prepare("INSERT INTO items (title, draft_title, content, draft_content, type, parent_id, slug, is_public) VALUES (:t1, :t2, :c1, :c2, :type, :pid, :slug, :pub)");
+            $stmt = $db->prepare("INSERT INTO items (title, draft_title, content, draft_content, type, parent_id, slug, is_public, cover_image, draft_cover_image) VALUES (:t1, :t2, :c1, :c2, :type, :pid, :slug, :pub, '', '')");
             $stmt->execute([':t1'=>$input['title'], ':t2'=>$input['title'], ':c1'=>$input['content']??'', ':c2'=>$input['content']??'', ':type'=>$input['type']??'page', ':pid'=>$input['parent_id']??null, ':slug'=>$slug, ':pub'=>$input['is_public']??0]);
             echo json_encode(['success' => true, 'id' => $db->lastInsertId()]);
             break;
