@@ -1,4 +1,4 @@
-# Private Workspace Instance
+# LunarDesk
 
 A lightweight, self-hosted workspace and documentation tool built with PHP, SQLite, and Vue.js. Designed for shared hosting environments with a focus on privacy and a hidden access portal.
 
@@ -19,7 +19,7 @@ A lightweight, self-hosted workspace and documentation tool built with PHP, SQLi
 
 ## Installation & Setup
 
-1. Create a new directory on your web server or local environment (e.g., `/workspace/`).
+1. Create a new directory on your web server or local environment (e.g., `/lunardesk/`).
 2. Upload `index.php`, `api.php`, and `p.php` to this directory. Ensure the directory has correct write permissions (CHMOD 755 or 777) so PHP can generate `data.db`.
 3. Navigate to the directory in your web browser. 
 4. The system will detect that no users exist and will present the **First Install Setup** screen.
@@ -30,7 +30,7 @@ A lightweight, self-hosted workspace and documentation tool built with PHP, SQLi
 For security, navigating to the standard directory URL will result in a fake `403 Forbidden` message. 
 
 To access the login screen, append `?portal=open` to your `index.php` URL.
-- **Example:** `https://yourdomain.com/workspace/index.php?portal=open`
+- **Example:** `https://yourdomain.com/lunardesk/index.php?portal=open`
 
 ## Usage
 
