@@ -3,7 +3,7 @@
 require_once 'auth.php';
 
 // Version update
-$app_version = "v1.1.4";
+$app_version = "v1.1.10";
 ?>
 <!DOCTYPE html>
 <html lang="en">

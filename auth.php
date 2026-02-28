@@ -1,15 +1,28 @@
 <?php
 // auth.php
+
+// --- SESSION HARDENING ---
+ini_set('session.cookie_httponly', 1);
+ini_set('session.use_only_cookies', 1);
+if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
+    ini_set('session.cookie_secure', 1);
+}
+session_set_cookie_params([
+    'samesite' => 'Lax',
+    'httponly' => true,
+    'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on'
+]);
+
 session_start();
 
-$app_version = "v1.1.3";
+$app_version = "v1.1.9";
 $dbPath = __DIR__ . '/data.db';
 
 try {
     $db = new PDO("sqlite:$dbPath");
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-    // Volledige tabel aanmaken inclusief de nieuwe kolommen voor een verse installatie
+    // Alle tabellen aanmaken voor robuuste werking op een vers systeem
     $db->exec("CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
@@ -19,8 +32,52 @@ try {
         role TEXT DEFAULT 'user'
     )");
 
-    // Achterwaartse compatibiliteit voor oudere databases. 
-    // Let op: SQLite accepteert geen UNIQUE of PRIMARY KEY via ALTER TABLE ADD COLUMN.
+    $db->exec("CREATE TABLE IF NOT EXISTS login_attempts (
+        ip TEXT PRIMARY KEY,
+        attempts INTEGER DEFAULT 0,
+        last_attempt INTEGER
+    )");
+
+    $db->exec("CREATE TABLE IF NOT EXISTS items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT,
+        draft_title TEXT,
+        content TEXT,
+        draft_content TEXT,
+        type TEXT,
+        parent_id INTEGER,
+        slug TEXT,
+        is_public INTEGER DEFAULT 0,
+        cover_image TEXT,
+        draft_cover_image TEXT,
+        has_draft INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )");
+
+    $db->exec("CREATE TABLE IF NOT EXISTS admin_terminal (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender TEXT,
+        content TEXT,
+        colorClass TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )");
+
+    $db->exec("CREATE TABLE IF NOT EXISTS rooms (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT,
+        webhook_key TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )");
+
+    $db->exec("CREATE TABLE IF NOT EXISTS webhook_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        room_id INTEGER,
+        sender TEXT,
+        content TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )");
+
+    // Achterwaartse compatibiliteit voor oudere databases
     try { $db->exec("ALTER TABLE users ADD COLUMN email TEXT"); } catch(Exception $e) {}
     try { $db->exec("ALTER TABLE users ADD COLUMN nickname TEXT"); } catch(Exception $e) {}
     try { $db->exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'"); } catch(Exception $e) {}
@@ -33,6 +90,14 @@ try {
 
 // --- LOGOUT ROUTE ---
 if (isset($_GET['action']) && $_GET['action'] === 'logout') {
+    $_SESSION = array();
+    if (ini_get("session.use_cookies")) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $params["path"], $params["domain"],
+            $params["secure"], $params["httponly"]
+        );
+    }
     session_destroy();
     header("Location: index.php");
     exit;
@@ -49,6 +114,9 @@ if ($userCount == 0) {
             ':email' => $_POST['setup_email'],
             ':nickname' => $_POST['setup_nickname']
         ]);
+        
+        session_regenerate_id(true);
+        
         $_SESSION['logged_in'] = true;
         $_SESSION['username'] = $_POST['setup_username'];
         $_SESSION['user_id'] = $db->lastInsertId();
@@ -101,12 +169,28 @@ if (empty($_SESSION['logged_in'])) {
         exit;
     }
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_username'])) {
+    $ip_address = $_SERVER['REMOTE_ADDR'];
+    $max_attempts = 5;
+    $lockout_time = 900;
+
+    $db->exec("DELETE FROM login_attempts WHERE last_attempt < " . (time() - $lockout_time));
+
+    $stmt = $db->prepare("SELECT attempts, last_attempt FROM login_attempts WHERE ip = :ip");
+    $stmt->execute([':ip' => $ip_address]);
+    $attempt_data = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($attempt_data && $attempt_data['attempts'] >= $max_attempts) {
+        $error = "Too many failed attempts. Please try again in 15 minutes.";
+    } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_username'])) {
         $stmt = $db->prepare("SELECT * FROM users WHERE username = :username");
         $stmt->execute([':username' => $_POST['login_username']]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($user && password_verify($_POST['login_password'], $user['password_hash'])) {
+            $db->prepare("DELETE FROM login_attempts WHERE ip = :ip")->execute([':ip' => $ip_address]);
+            
+            session_regenerate_id(true);
+            
             $_SESSION['logged_in'] = true;
             $_SESSION['username'] = $user['username'];
             $_SESSION['user_id'] = $user['id'];
@@ -115,6 +199,14 @@ if (empty($_SESSION['logged_in'])) {
             exit;
         } else {
             $error = "Invalid credentials.";
+            
+            if ($attempt_data) {
+                $db->prepare("UPDATE login_attempts SET attempts = attempts + 1, last_attempt = :time WHERE ip = :ip")
+                   ->execute([':time' => time(), ':ip' => $ip_address]);
+            } else {
+                $db->prepare("INSERT INTO login_attempts (ip, attempts, last_attempt) VALUES (:ip, 1, :time)")
+                   ->execute([':ip' => $ip_address, ':time' => time()]);
+            }
         }
     }
     ?>

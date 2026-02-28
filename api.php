@@ -31,7 +31,7 @@ try {
 
     $method = $_SERVER['REQUEST_METHOD'];
     $action = $_GET['action'] ?? '';
-    $input = json_decode(file_get_contents('php://input'), true);
+    $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
     // --- PROFIEL INSTELLINGEN ---
     if ($action === 'profile') {
@@ -86,7 +86,7 @@ try {
             $msg = "Hello " . $input['nickname'] . ",\n\nYou have been granted access to LunarDesk.\n\nUsername: " . $input['username'] . "\nPassword: " . $input['password'] . "\n\nLogin securely here: " . $baseUrl;
             $headers = "From: noreply@" . $_SERVER['HTTP_HOST'];
             
-            @mail($to, $subject, $msg, $headers); // @ onderdrukt falen in omgevingen zonder mail configuratie
+            @mail($to, $subject, $msg, $headers);
 
             echo json_encode(['success' => true]);
         } elseif ($method === 'PUT') {
@@ -209,10 +209,17 @@ try {
             if (!empty($input['title'])) {
                 $baseSlug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $input['title'])));
                 $slug = $baseSlug . '-' . rand(1000, 9999);
-                $stmt = $db->prepare("INSERT INTO items (title, draft_title, content, draft_content, type, parent_id, slug, is_public, cover_image, draft_cover_image) VALUES (:title, :title, :content, :content, :type, :parent_id, :slug, :is_public, '', '')");
+                
+                $stmt = $db->prepare("INSERT INTO items (title, draft_title, content, draft_content, type, parent_id, slug, is_public, cover_image, draft_cover_image) VALUES (:title1, :title2, :content1, :content2, :type, :parent_id, :slug, :is_public, '', '')");
                 $stmt->execute([
-                    ':title' => $input['title'], ':content' => $input['content'] ?? '', ':type' => $input['type'] ?? 'page',
-                    ':parent_id' => $input['parent_id'] ?? null, ':slug' => $slug, ':is_public' => $input['is_public'] ?? 0
+                    ':title1' => $input['title'],
+                    ':title2' => $input['title'],
+                    ':content1' => $input['content'] ?? '',
+                    ':content2' => $input['content'] ?? '',
+                    ':type' => $input['type'] ?? 'page',
+                    ':parent_id' => $input['parent_id'] ?? null,
+                    ':slug' => $slug,
+                    ':is_public' => $input['is_public'] ?? 0
                 ]);
                 echo json_encode(['success' => true, 'id' => $db->lastInsertId()]);
             }
@@ -220,15 +227,30 @@ try {
         case 'PUT':
             if (isset($input['id'])) {
                 $cover = $input['cover_image'] ?? '';
+                
+                // Splits de execute variabelen correct op basis van de actie
                 if (isset($input['action']) && $input['action'] === 'publish') {
-                    $stmt = $db->prepare("UPDATE items SET title = :title, content = :content, cover_image = :cover, draft_title = :title, draft_content = :content, draft_cover_image = :cover, has_draft = 0, is_public = :is_public WHERE id = :id");
+                    $stmt = $db->prepare("UPDATE items SET title = :title1, content = :content1, cover_image = :cover1, draft_title = :title2, draft_content = :content2, draft_cover_image = :cover2, has_draft = 0, is_public = :is_public WHERE id = :id");
+                    $stmt->execute([
+                        ':title1' => $input['title'],
+                        ':title2' => $input['title'],
+                        ':content1' => $input['content'] ?? '',
+                        ':content2' => $input['content'] ?? '',
+                        ':cover1' => $cover,
+                        ':cover2' => $cover,
+                        ':is_public' => $input['is_public'] ?? 0, 
+                        ':id' => $input['id']
+                    ]);
                 } else {
-                    $stmt = $db->prepare("UPDATE items SET draft_title = :title, draft_content = :content, draft_cover_image = :cover, has_draft = 1, is_public = :is_public WHERE id = :id");
+                    $stmt = $db->prepare("UPDATE items SET draft_title = :title1, draft_content = :content1, draft_cover_image = :cover1, has_draft = 1, is_public = :is_public WHERE id = :id");
+                    $stmt->execute([
+                        ':title1' => $input['title'],
+                        ':content1' => $input['content'] ?? '',
+                        ':cover1' => $cover,
+                        ':is_public' => $input['is_public'] ?? 0, 
+                        ':id' => $input['id']
+                    ]);
                 }
-                $stmt->execute([
-                    ':title' => $input['title'], ':content' => $input['content'] ?? '', ':cover' => $cover, 
-                    ':is_public' => $input['is_public'] ?? 0, ':id' => $input['id']
-                ]);
                 echo json_encode(['success' => true]);
             }
             break;
