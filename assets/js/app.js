@@ -51,6 +51,7 @@ createApp({
             if(this.activeRoom) this.fetchRoomMessages();
         }, 5000);
 
+        // Bijgewerkte positie-berekening
         const updateActiveCell = (e) => {
             if (!e.target || !e.target.closest) return;
             const cell = e.target.closest('.tc-cell');
@@ -60,12 +61,14 @@ createApp({
                 const bg = window.getComputedStyle(cell).backgroundColor;
                 this.activeCellColor = this.rgbToHex(bg);
                 
-                const wrapper = document.getElementById('editor-wrapper');
-                if (wrapper) {
-                    const wrapperRect = wrapper.getBoundingClientRect();
+                // Bereken positie ten opzichte van de <main> container in plaats van de scroll wrapper
+                const mainContainer = document.querySelector('main');
+                if (mainContainer) {
+                    const mainRect = mainContainer.getBoundingClientRect();
                     const cellRect = cell.getBoundingClientRect();
-                    this.cellMenuTop = cellRect.top - wrapperRect.top + wrapper.scrollTop - 45;
-                    this.cellMenuLeft = cellRect.left - wrapperRect.left + wrapper.scrollLeft;
+                    
+                    this.cellMenuTop = cellRect.top - mainRect.top - 45;
+                    this.cellMenuLeft = cellRect.left - mainRect.left;
                     this.showCellMenu = true;
                 }
             } else if (!e.target.closest('.floating-menu')) {
@@ -76,6 +79,13 @@ createApp({
 
         document.addEventListener('click', updateActiveCell);
         document.addEventListener('keyup', updateActiveCell);
+        
+        // Verberg het kleurenmenu automatisch als we scrollen
+        window.addEventListener('scroll', (e) => {
+            if (e.target.id === 'editor-wrapper') {
+                this.showCellMenu = false;
+            }
+        }, true);
     },
     methods: {
         linkify(text) {
