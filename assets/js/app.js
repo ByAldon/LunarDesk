@@ -15,6 +15,7 @@ createApp({
             lastSavedContent: null,
             lastSavedTitle: null,
             lastSavedPublic: null,
+            lastSavedCover: null,
             lastSaveTime: null,
             needsSave: false,
             
@@ -31,6 +32,13 @@ createApp({
             
             showSettingsModal: false,
             settingsRoom: null,
+
+            // Variabelen voor de custom prompt popup
+            showPromptModal: false,
+            promptTitle: '',
+            promptInput: '',
+            promptAction: null,
+            promptPayload: null,
 
             showCellMenu: false,
             cellMenuTop: 0,
@@ -51,7 +59,6 @@ createApp({
             if(this.activeRoom) this.fetchRoomMessages();
         }, 5000);
 
-        // Bijgewerkte positie-berekening
         const updateActiveCell = (e) => {
             if (!e.target || !e.target.closest) return;
             const cell = e.target.closest('.tc-cell');
@@ -61,7 +68,6 @@ createApp({
                 const bg = window.getComputedStyle(cell).backgroundColor;
                 this.activeCellColor = this.rgbToHex(bg);
                 
-                // Bereken positie ten opzichte van de <main> container in plaats van de scroll wrapper
                 const mainContainer = document.querySelector('main');
                 if (mainContainer) {
                     const mainRect = mainContainer.getBoundingClientRect();
@@ -80,7 +86,6 @@ createApp({
         document.addEventListener('click', updateActiveCell);
         document.addEventListener('keyup', updateActiveCell);
         
-        // Verberg het kleurenmenu automatisch als we scrollen
         window.addEventListener('scroll', (e) => {
             if (e.target.id === 'editor-wrapper') {
                 this.showCellMenu = false;
@@ -236,13 +241,18 @@ createApp({
             const res = await fetch('api.php?action=rooms');
             this.rooms = await res.json();
         },
-        async createRoom() {
-            const title = prompt("Channel name?");
-            if(!title) return;
-            await fetch('api.php?action=rooms', { method: 'POST', body: JSON.stringify({ title }) });
-            await this.postSystemMsg(`Channel #${title} manually created.`, "text-green-400");
-            await this.fetchRooms();
+
+        // VERNIEUWD: Opent de custom prompt modal voor een kanaal
+        createRoom() {
+            this.promptTitle = "Channel name?";
+            this.promptInput = "";
+            this.promptAction = 'createRoom';
+            this.showPromptModal = true;
+            this.$nextTick(() => { 
+                if (this.$refs.promptInputRef) this.$refs.promptInputRef.focus(); 
+            });
         },
+
         selectRoom(room) {
             this.activeRoom = room;
             this.fetchRoomMessages();
@@ -327,6 +337,50 @@ createApp({
 
         getPages(spaceId) { return this.items.filter(i => i.type === 'page' && i.parent_id == spaceId); },
 
+        triggerCoverUpload() {
+            document.getElementById('coverUpload').click();
+        },
+        async handleCoverUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const formData = new FormData();
+            formData.append('image', file);
+            
+            this.loading = true;
+            try {
+                const res = await fetch('api.php?action=upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success && data.file && data.file.url) {
+                    this.activePage.cover_image = data.file.url;
+                    this.needsSave = true;
+                } else {
+                    alert("Upload failed.");
+                }
+            } catch(err) {
+                console.error(err);
+                alert("Upload error.");
+            }
+            this.loading = false;
+            e.target.value = ''; 
+        },
+        removeCover() {
+            this.activePage.cover_image = '';
+            this.needsSave = true;
+        },
+        hasCover(page) {
+            return page.cover_image && page.cover_image !== '';
+        },
+        getCoverStyle(page) {
+            if (this.hasCover(page)) {
+                return `background-image: url('${page.cover_image}'); background-size: cover; background-position: center;`;
+            }
+            return '';
+        },
+
         async initEditor(dataBlocks) {
             if (globalEditorInstance) {
                 try { await globalEditorInstance.isReady; globalEditorInstance.destroy(); } catch(e) { }
@@ -346,9 +400,17 @@ createApp({
                     table: { class: Table, inlineToolbar: fullInlineToolbar, config: { withHeadings: true } }, 
                     quote: { class: Quote, inlineToolbar: fullInlineToolbar },
                     warning: { class: Warning, inlineToolbar: fullInlineToolbar }, 
+                    image: {
+                        class: ImageTool,
+                        config: {
+                            endpoints: {
+                                byFile: 'api.php?action=upload', 
+                            }
+                        }
+                    },
                     Color: { class: window.ColorPlugin, config: { colorCollections: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#ffffff', '#cbd5e1', '#94a3b8', '#1e293b'], defaultColor: '#3b82f6', type: 'text', customPicker: true } },
                     Marker: { class: window.ColorPlugin, config: { colorCollections: ['#1e293b', '#334155', '#1e3a8a', '#7f1d1d', '#14532d', '#78350f', '#4c1d95', '#831843', '#f59e0b', '#3b82f6'], defaultColor: '#1e3a8a', type: 'marker', customPicker: true } },
-                    delimiter: Delimiter, inlineCode: { class: InlineCode }, image: SimpleImage, embed: { class: Embed, inlineToolbar: true }
+                    delimiter: Delimiter, inlineCode: { class: InlineCode }, embed: { class: Embed, inlineToolbar: true }
                 }
             });
 
@@ -378,7 +440,12 @@ createApp({
 
         selectDoc(page) { 
             const contentToLoad = page.has_draft ? page.draft_content : page.content;
-            this.activePage = { ...page, title: page.has_draft ? page.draft_title : page.title }; 
+            
+            this.activePage = { 
+                ...page, 
+                title: page.has_draft ? page.draft_title : page.title,
+                cover_image: page.has_draft ? page.draft_cover_image : page.cover_image
+            }; 
             this.showCellMenu = false;
             
             const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?p=' + page.id;
@@ -395,24 +462,51 @@ createApp({
                 this.lastSavedContent = JSON.stringify(parsedData);
                 this.lastSavedTitle = this.activePage.title;
                 this.lastSavedPublic = this.activePage.is_public;
+                this.lastSavedCover = this.activePage.cover_image;
                 this.lastSaveTime = null; 
                 this.needsSave = false;
             });
         },
 
-        async createItem(type, parentId = null) {
-            const title = prompt("Name?");
+        // VERNIEUWD: Opent de custom prompt modal voor een Space of Pagina
+        createItem(type, parentId = null) {
+            this.promptTitle = type === 'space' ? "Space Name?" : "Page Name?";
+            this.promptInput = "";
+            this.promptAction = 'createItem';
+            this.promptPayload = { type, parentId };
+            this.showPromptModal = true;
+            this.$nextTick(() => { 
+                if (this.$refs.promptInputRef) this.$refs.promptInputRef.focus(); 
+            });
+        },
+
+        // VERNIEUWD: Verwerkt de invoer van de custom prompt modal
+        async submitPrompt() {
+            const title = this.promptInput.trim();
             if (!title) return;
-            this.loading = true;
-            await fetch('api.php', { method: 'POST', body: JSON.stringify({ title, type, parent_id: parentId }) });
-            await this.fetchData();
+            
+            this.showPromptModal = false;
+
+            if (this.promptAction === 'createRoom') {
+                await fetch('api.php?action=rooms', { method: 'POST', body: JSON.stringify({ title }) });
+                await this.postSystemMsg(`Channel #${title} manually created.`, "text-green-400");
+                await this.fetchRooms();
+            } 
+            else if (this.promptAction === 'createItem') {
+                this.loading = true;
+                const type = this.promptPayload.type;
+                const parentId = this.promptPayload.parentId;
+                await fetch('api.php', { method: 'POST', body: JSON.stringify({ title, type, parent_id: parentId }) });
+                await this.fetchData();
+            }
         },
         
         async silentAutoSave() {
             if (this.activePage && globalEditorInstance) {
                 let titleOrPublicChanged = (this.activePage.title !== this.lastSavedTitle || this.activePage.is_public !== this.lastSavedPublic);
+                let coverChanged = (this.activePage.cover_image !== this.lastSavedCover);
                 
-                if (this.needsSave || titleOrPublicChanged) {
+                if (this.needsSave || titleOrPublicChanged || coverChanged) {
                     try {
                         const rawOutput = await globalEditorInstance.save();
                         const outputData = this.extractCellColors(rawOutput); 
@@ -423,6 +517,7 @@ createApp({
                         this.lastSavedContent = outputStr; 
                         this.lastSavedTitle = this.activePage.title;
                         this.lastSavedPublic = this.activePage.is_public; 
+                        this.lastSavedCover = this.activePage.cover_image;
                         this.lastSaveTime = this.getFormattedDateTime();
                         this.needsSave = false; 
                         this.activePage.has_draft = 1;
@@ -432,6 +527,7 @@ createApp({
                             this.items[index].has_draft = 1;
                             this.items[index].draft_title = this.activePage.title;
                             this.items[index].draft_content = outputStr;
+                            this.items[index].draft_cover_image = this.activePage.cover_image;
                         }
                     } catch (e) { }
                 }
@@ -451,6 +547,7 @@ createApp({
                     this.lastSavedContent = outputStr; 
                     this.lastSavedTitle = this.activePage.title;
                     this.lastSavedPublic = this.activePage.is_public; 
+                    this.lastSavedCover = this.activePage.cover_image;
                     this.lastSaveTime = this.getFormattedDateTime();
                     this.needsSave = false; 
                     this.activePage.has_draft = 0; 

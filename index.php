@@ -3,7 +3,7 @@
 require_once 'auth.php';
 
 // Version update
-$app_version = "v1.0.10";
+$app_version = "v1.1.1";
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -26,6 +26,7 @@ $app_version = "v1.0.10";
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/delimiter@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/inline-code@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/simple-image@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/image@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/embed@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/list@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/editorjs-text-color-plugin@2.0.4/dist/bundle.js"></script>
@@ -184,27 +185,45 @@ $app_version = "v1.0.10";
                 <div v-if="loading" class="absolute top-0 left-0 right-0 h-1 bg-blue-500 animate-pulse z-50"></div>
 
                 <template v-if="activePage">
-                    <header class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900 shrink-0">
-                        <input v-model="activePage.title" class="text-xl font-bold bg-transparent text-white outline-none w-full min-w-[100px]">
-                        <div class="flex items-center space-x-4 shrink-0">
-                            <span v-if="lastSaveTime" class="text-[11px] text-slate-500 italic mr-2 whitespace-nowrap hidden sm:inline">Draft saved: {{ lastSaveTime }}</span>
-                            <label class="flex items-center text-xs text-slate-400 gap-2 cursor-pointer hover:text-slate-200 transition">
-                                <span>Public:</span>
-                                <input type="checkbox" v-model="activePage.is_public" :true-value="1" :false-value="0" class="accent-blue-600">
-                            </label>
-                            <button @click="manualPublish" class="bg-green-600 text-white px-4 py-1.5 rounded text-sm hover:bg-green-500 transition shadow-lg whitespace-nowrap">Publish to Live</button>
-                            <button @click="deleteItem(activePage.id, 'page')" class="text-red-500 text-xs hover:text-red-400 hover:underline transition">Delete</button>
+                    <header class="relative border-b border-slate-800 flex flex-col justify-end shrink-0 transition-all duration-300"
+                            :class="hasCover(activePage) ? 'h-64' : 'h-28 bg-slate-900'"
+                            :style="getCoverStyle(activePage)">
+                        
+                        <div v-if="hasCover(activePage)" class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/50 to-transparent z-0"></div>
+
+                        <div class="absolute top-4 right-4 z-20 flex gap-2">
+                            <input type="file" id="coverUpload" accept="image/*" class="hidden" @change="handleCoverUpload">
+                            <button @click="triggerCoverUpload" class="bg-slate-900/80 hover:bg-slate-800 text-white px-3 py-1.5 rounded text-xs font-bold transition shadow-lg backdrop-blur-md border border-slate-700">
+                                <span v-if="hasCover(activePage)">Change Banner</span>
+                                <span v-else>+ Add Banner</span>
+                            </button>
+                            <button v-if="hasCover(activePage)" @click="removeCover" class="bg-red-900/80 hover:bg-red-800 text-white px-3 py-1.5 rounded text-xs font-bold transition shadow-lg backdrop-blur-md border border-red-800">Remove</button>
+                        </div>
+
+                        <div class="relative z-10 p-6 pb-4 flex justify-between items-end w-full mt-auto">
+                            <div class="w-full">
+                                <input v-model="activePage.title" placeholder="Page Title..." class="text-3xl font-black bg-transparent text-white outline-none w-full min-w-[100px] drop-shadow-md placeholder-slate-500">
+                            </div>
+                            <div class="flex items-center space-x-4 shrink-0 mb-1 ml-4">
+                                <span v-if="lastSaveTime" class="text-[11px] text-slate-300 italic mr-2 whitespace-nowrap hidden sm:inline drop-shadow-md font-bold">Draft saved: {{ lastSaveTime }}</span>
+                                <label class="flex items-center text-xs text-slate-300 gap-2 cursor-pointer hover:text-white transition drop-shadow-md font-bold">
+                                    <span>Public:</span>
+                                    <input type="checkbox" v-model="activePage.is_public" :true-value="1" :false-value="0" class="accent-blue-600 shadow-lg">
+                                </label>
+                                <button @click="manualPublish" class="bg-green-600 text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-green-500 transition shadow-lg whitespace-nowrap">Publish</button>
+                                <button @click="deleteItem(activePage.id, 'page')" class="text-red-400 text-xs font-bold hover:text-red-300 hover:underline transition drop-shadow-md">Delete</button>
+                            </div>
                         </div>
                     </header>
 
-                    <div class="bg-slate-900 border-b border-slate-800 p-2 px-4 flex justify-between items-center text-xs shrink-0 overflow-hidden">
+                    <div class="bg-slate-900 border-b border-slate-800 p-2 px-6 flex justify-between items-center text-xs shrink-0 overflow-hidden shadow-inner">
                         <span class="text-slate-400 truncate">
-                            <span class="text-blue-400 font-bold">ℹ️ Tables:</span> Select the text inside a cell to format it. Click a cell to adjust its background color.
+                            <span class="text-blue-400 font-bold">ℹ️ Info:</span> Try adding a Banner Image! Or type / to use the Image tool.
                         </span>
                         <span v-if="activePage.has_draft == 1" class="text-amber-500 font-bold animate-pulse uppercase tracking-wider text-[10px] ml-4 shrink-0">Unpublished Draft</span>
                     </div>
                     
-                    <div v-if="activePage.is_public == 1" class="bg-blue-900/20 text-[11px] text-blue-300 border-b border-slate-800 p-2 px-4 flex justify-between shrink-0">
+                    <div v-if="activePage.is_public == 1" class="bg-blue-900/20 text-[11px] text-blue-300 border-b border-slate-800 p-2 px-6 flex justify-between shrink-0">
                         <span class="truncate">Public Link: <a :href="'p.php?s=' + activePage.slug" target="_blank" class="text-blue-400 hover:text-blue-300 underline font-mono">p.php?s={{ activePage.slug }}</a></span>
                     </div>
 
@@ -216,9 +235,7 @@ $app_version = "v1.0.10";
                         <button @click="setCellColor('')" class="w-5 h-5 rounded-full border border-slate-500 flex items-center justify-center hover:bg-slate-700 transition" title="Clear Color">
                             <span class="text-slate-300 text-sm leading-none mt-[-2px]">&times;</span>
                         </button>
-                        
                         <div class="w-px h-4 bg-slate-600 mx-1"></div>
-                        
                         <button @click="setCellColor('#4c1d95')" class="w-5 h-5 rounded-full hover:scale-110 transition bg-[#4c1d95] shadow-inner" title="Purple"></button>
                         <button @click="setCellColor('#14532d')" class="w-5 h-5 rounded-full hover:scale-110 transition bg-[#14532d] shadow-inner" title="Green"></button>
                         <button @click="setCellColor('#1e3a8a')" class="w-5 h-5 rounded-full hover:scale-110 transition bg-[#1e3a8a] shadow-inner" title="Blue"></button>
@@ -226,9 +243,7 @@ $app_version = "v1.0.10";
                         <button @click="setCellColor('#78350f')" class="w-5 h-5 rounded-full hover:scale-110 transition bg-[#78350f] shadow-inner" title="Amber"></button>
                         <button @click="setCellColor('#334155')" class="w-5 h-5 rounded-full hover:scale-110 transition bg-[#334155] shadow-inner" title="Grey Light"></button>
                         <button @click="setCellColor('#1e293b')" class="w-5 h-5 rounded-full hover:scale-110 transition bg-[#1e293b] shadow-inner" title="Grey Dark"></button>
-                        
                         <div class="w-px h-4 bg-slate-600 mx-1"></div>
-
                         <label class="w-5 h-5 rounded-full border border-slate-500 overflow-hidden cursor-pointer flex items-center justify-center hover:scale-110 transition relative" title="Custom Color">
                             <input type="color" v-model="activeCellColor" @input="applyCellColor" class="absolute -inset-2 w-10 h-10 cursor-pointer p-0 m-0 border-0 bg-transparent">
                         </label>
@@ -278,6 +293,19 @@ $app_version = "v1.0.10";
                     <button @click="deleteRoom" class="text-red-500 hover:text-red-400 hover:underline text-xs font-bold">Delete entire channel</button>
                     <button @click="showSettingsModal = false" class="bg-slate-800 border border-slate-700 text-white px-6 py-2 rounded text-sm hover:bg-slate-700 transition font-bold">Done</button>
                 </div>
+            </div>
+        </div>
+
+        <div v-if="showPromptModal" class="fixed inset-0 z-[150] bg-black/80 flex items-center justify-center backdrop-blur-sm">
+            <div class="bg-slate-900 p-6 rounded-xl border border-slate-700 w-full max-w-sm shadow-2xl">
+                <h2 class="text-lg font-bold text-white mb-4">{{ promptTitle }}</h2>
+                <form @submit.prevent="submitPrompt">
+                    <input type="text" v-model="promptInput" ref="promptInputRef" class="w-full bg-slate-950 border border-slate-700 rounded p-3 text-sm text-white outline-none focus:border-blue-500 mb-6" required placeholder="Type a name...">
+                    <div class="flex justify-end gap-3">
+                        <button type="button" @click="showPromptModal = false" class="text-slate-400 hover:text-white px-4 py-2 rounded text-sm transition">Cancel</button>
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded text-sm font-bold transition shadow-lg">Confirm</button>
+                    </div>
+                </form>
             </div>
         </div>
 
