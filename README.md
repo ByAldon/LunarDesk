@@ -2,6 +2,12 @@
 
 A lightweight, self-hosted workspace and documentation tool built with PHP, SQLite, and Vue.js. Designed for shared hosting environments with a focus on privacy, rapid documentation, and a hidden access portal.
 
+## 💡 About This Project
+
+This project was originally built as a private, internal tool for my own personal use, specifically tailored to the workflow of my daily job. I have decided to share this project open-source so others might benefit from it.
+
+**Please note:** I am not planning to take requests to build private projects or develop custom features for others. The tool is provided as-is. If you wish to use LunarDesk for yourself, you are more than welcome to fork the repository, modify the code, and customize the system entirely to your own taste and requirements!
+
 ## 🚀 Key Features
 
 ### 📂 Hierarchical Documentation
