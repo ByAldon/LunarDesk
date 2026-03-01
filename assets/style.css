@@ -11,17 +11,18 @@
 
 body { font-family: 'Inter', sans-serif; background-color: var(--bg-primary); color: var(--text-main); }
 
-/* BORDERLESS FLAT STYLE */
+/* FLAT NO BORDER STYLE */
 * {
     transition: background-color 0.1s ease, transform 0.1s ease;
     border: none !important;
     border-radius: 0 !important;
 }
 
-/* Minimalist separator lines */
+/* Explicit separator lines */
 .border-r { border-right: 2px solid rgba(0, 0, 0, 0.4) !important; }
 .border-b { border-bottom: 2px solid rgba(0, 0, 0, 0.4) !important; }
 .border-l { border-left: 3px solid var(--accent) !important; }
+.border-t { border-top: 1px solid rgba(0, 0, 0, 0.4) !important; }
 
 [v-cloak] { display: none; }
 

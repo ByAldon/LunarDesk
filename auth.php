@@ -4,7 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-$app_version = "v1.8.2-beta";
+include 'version.php';
 $dbPath = __DIR__ . '/data.db';
 
 try {
@@ -114,7 +114,11 @@ if (empty($_SESSION['logged_in'])) {
         
         <input type="text" name="un" placeholder="User" required style="box-sizing:border-box;display:block;width:100%;background:#020617;padding:12px;color:white;margin-bottom:10px;border:none;outline:none;">
         <input type="password" name="pw" placeholder="Pass" required style="box-sizing:border-box;display:block;width:100%;background:#020617;padding:12px;color:white;margin-bottom:20px;border:none;outline:none;">
-        <button style="box-sizing:border-box;width:100%;background:#3b82f6;padding:12px;color:white;font-weight:900;border:none;cursor:pointer;">ENTER</button>
+        <button style="box-sizing:border-box;width:100%;background:#2563eb;padding:14px;color:white;font-weight:900;border:none;border-radius:12px;cursor:pointer;text-transform:uppercase;letter-spacing:0.1em;box-shadow:0 4px 15px rgba(37,99,235,0.3); margin-bottom: 12px;">ENTER</button>
+        
+<div style="text-align:center;">
+    <a href="reset_request.php" style="color:#64748b; font-size:10px; font-weight:900; text-decoration:none; text-transform:uppercase; letter-spacing:0.1em;" onmouseover="this.style.color='#3b82f6'" onmouseout="this.style.color='#64748b'">Forgot Password?</a>
+</div>
         
         <div style="margin-top:30px;text-align:center;font-size:9px;color:#475569;font-weight:900;text-transform:uppercase;letter-spacing:0.2em;line-height:1.8;">
             LunarDesk &bull; <?php echo $app_version; ?><br>
