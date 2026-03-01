@@ -1,6 +1,6 @@
 <?php
 // p.php - Public Viewer
-$app_version = "v1.5.5-beta";
+$app_version = "v1.8.3-beta";
 $dbPath = __DIR__ . '/data.db';
 $slug = $_GET['s'] ?? '';
 try {
@@ -15,7 +15,7 @@ try {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title><?php echo $page['title']; ?></title>
+    <title><?php echo $page['title']; ?> | LunarDesk</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/editorjs@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/header@latest"></script>
@@ -38,11 +38,28 @@ try {
                                 <a href="?s=<?php echo $sp['slug']; ?>" class="flex items-center px-4 py-2 text-sm <?php echo $sp['slug'] == $slug ? 'bg-slate-950 text-white font-bold nav-item-active shadow-inner' : 'text-slate-600 hover:text-white'; ?>">
                                     <div class="nav-indicator"></div><?php echo $sp['title']; ?>
                                 </a>
+                                <?php $subpages = array_filter($items, fn($i) => $i['type'] === 'subpage' && $i['parent_id'] == $sp['id'] && $i['is_public'] == 1); ?>
+                                <?php if (!empty($subpages)): ?>
+                                    <ul class="mt-1 ml-4 space-y-1">
+                                        <?php foreach ($subpages as $subp): ?>
+                                            <li class="nav-item">
+                                                <a href="?s=<?php echo $subp['slug']; ?>" class="flex items-center pl-4 pr-2 py-1.5 text-xs <?php echo $subp['slug'] == $slug ? 'bg-slate-950 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-600 hover:text-slate-400'; ?>">
+                                                    <div class="nav-indicator"></div><?php echo $subp['title']; ?>
+                                                </a>
+                                            </li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                <?php endif; ?>
                             </li>
                         <?php endforeach; ?>
                     </ul>
                 </div>
             <?php endforeach; ?>
+        </div>
+        
+        <div class="mt-auto p-6 border-t border-slate-950">
+            <span class="block text-[9px] text-slate-700 font-black uppercase tracking-[0.3em] mb-2">LunarDesk &bull; <?php echo $app_version; ?></span>
+            <span class="block text-[9px] text-slate-700 font-black uppercase tracking-[0.3em]">2026 &copy; Ported by <a href="https://github.com/ByAldon" target="_blank" class="hover:text-blue-500 transition-colors">Aldon</a></span>
         </div>
     </aside>
     <main class="flex-1 h-full overflow-y-auto flex flex-col">

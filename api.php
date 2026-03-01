@@ -5,12 +5,12 @@ header('Content-Type: application/json');
 
 if (empty($_SESSION['logged_in'])) {
     http_response_code(401);
-    echo json_encode(['error' => 'Locked']);
+    echo json_encode(['error' => 'Unauthorized']);
     exit;
 }
 
 $dbPath = __DIR__ . '/data.db';
-$app_version = "v1.5.5-beta";
+$app_version = "v1.5.8-beta";
 
 try {
     $db = new PDO("sqlite:$dbPath");
