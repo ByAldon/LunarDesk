@@ -1,40 +1,48 @@
 /* style.css */
-.ce-block__content, .ce-toolbar__content { color: #cbd5e1; max-width: 850px; margin: 0 auto; }
-.ce-toolbar__actions { color: #cbd5e1; }
-.ce-toolbar__plus, .ce-toolbar__settings-btn { background-color: #1e293b; color: white; border: 1px solid #334155; }
-.ce-toolbar__plus:hover, .ce-toolbar__settings-btn:hover { background-color: #334155; }
-.ce-popover { background-color: #1e293b; border-color: #334155; color: #cbd5e1; }
-.ce-popover__item:hover, .ce-popover__item--active { background-color: #334155 !important; color: white; }
-.ce-popover__item-icon { background-color: #0f172a; color: white; box-shadow: none; border: 1px solid #334155; }
-.ce-inline-toolbar { background-color: #1e293b; border-color: #334155; color: white; }
-.ce-inline-toolbar__dropdown:hover, .ce-inline-tool:hover { background-color: #334155; }
-.cdx-input { background-color: #0f172a; border-color: #334155; color: white; }
-.ce-header { color: white; font-weight: bold; }
-.cdx-list { padding-left: 20px; }
-.cdx-checklist__item--checked .cdx-checklist__item-text { color: #64748b; text-decoration: line-through; }
-.cdx-checklist__item-checkbox { background-color: #1e293b; border-color: #334155; }
-.cdx-checklist__item--checked .cdx-checklist__item-checkbox { background-color: #3b82f6; border-color: #3b82f6; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
-.tc-table, .tc-cell { border-color: #334155 !important; color: #cbd5e1; transition: background-color 0.2s; }
-.tc-row::after { border-color: #334155; }
-.tc-toolbox__button { border-color: #334155; color: #cbd5e1; }
-.tc-toolbox__button:hover { background-color: #1e293b; color: white; }
+:root {
+    --bg-primary: #020617;
+    --bg-secondary: #0f172a;
+    --bg-tertiary: #1e293b;
+    --accent: #3b82f6;
+    --text-main: #cbd5e1;
+}
 
-.cdx-quote { border-left: 4px solid #3b82f6; padding-left: 1rem; }
-.cdx-quote__text { color: #e2e8f0; font-style: italic; }
-.cdx-warning { background-color: #1e293b; border-left: 4px solid #f59e0b; padding: 1rem; border-radius: 4px; }
-.cdx-warning__title { color: #fcd34d; font-weight: bold; margin-bottom: 0.5rem; }
-.inline-code { background: #1e293b; color: #4ade80; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.9em; border: 1px solid #334155; }
+body { font-family: 'Inter', sans-serif; background-color: var(--bg-primary); color: var(--text-main); }
 
-.ce-popover__custom-content { background-color: #1e293b !important; }
-mark.cdx-marker { background: rgba(245, 158, 11, 0.3); color: inherit; padding: 0 4px; border-radius: 3px; }
+/* BORDERLESS FLAT STYLE */
+* {
+    transition: background-color 0.1s ease, transform 0.1s ease;
+    border: none !important;
+    border-radius: 0 !important;
+}
 
-#editorjs { min-height: 100%; cursor: text; padding-bottom: 200px; }
+/* Minimalist separator lines */
+.border-r { border-right: 2px solid rgba(0, 0, 0, 0.4) !important; }
+.border-b { border-bottom: 2px solid rgba(0, 0, 0, 0.4) !important; }
+.border-l { border-left: 3px solid var(--accent) !important; }
 
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #475569; }
+[v-cloak] { display: none; }
 
-.chat-link { color: #60a5fa; text-decoration: underline; }
-.chat-link:hover { color: #93c5fd; }
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-thumb { background: var(--bg-tertiary); }
+
+.nav-item { position: relative; }
+.nav-indicator {
+    position: absolute;
+    left: 0; top: 0; bottom: 0; width: 3px;
+    background-color: var(--accent);
+    transform: scaleY(0);
+    transition: transform 0.2s ease;
+}
+.nav-item-active .nav-indicator { transform: scaleY(1); }
+
+/* Editor.js Tweaks */
+.ce-block__content, .ce-toolbar__content { max-width: 800px; margin: 0 auto; }
+.ce-toolbar__plus, .ce-toolbar__settings-btn { background-color: var(--bg-secondary); color: white; }
+.ce-popover { background-color: var(--bg-secondary); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+.ce-popover__item:hover { background-color: var(--bg-tertiary) !important; }
+
+.chat-link { color: var(--accent); font-weight: 700; }
+.chat-link:hover { text-decoration: underline; }

@@ -1,4 +1,4 @@
-// app.js
+// assets/js/app.js
 let globalEditorInstance = null;
 
 function focusEditor() {
@@ -19,47 +19,35 @@ createApp({
             lastSavedCover: null,
             lastSaveTime: null,
             needsSave: false,
-            
             rooms: [],
             activeRoom: null,
             roomMessages: [],
-            adminMessages: [{ id: 1, sender: "System", content: "Terminal ready. Type /help for commands.", colorClass: "text-blue-400" }],
+            adminMessages: [{ id: 1, sender: "System", content: "Flat Design Core active. Signals connected.", colorClass: "text-blue-700" }],
             newAdminMsg: '',
-            
             adminHeight: 250,
             leftColWidth: 320,  
-            midColWidth: 256,   
+            midColWidth: 280,   
             dragTarget: null,   
-            
             showSettingsModal: false,
             settingsRoom: null,
-
             showPromptModal: false,
             promptTitle: '',
             promptInput: '',
             promptAction: null,
             promptPayload: null,
-
-            // Account & User Management Modals
             showProfileModal: false,
             profileForm: { username: '', email: '', nickname: '', password: '' },
-
             showUsersModal: false,
             userList: [],
             editingUser: false,
             userForm: { id: null, username: '', email: '', nickname: '', password: '', role: 'user' },
-
-            showCellMenu: false,
-            cellMenuTop: 0,
-            cellMenuLeft: 0,
-            activeCellColor: '#1e293b',
-
-            // Cropper & Beta Notice
             showCropModal: false,
             cropImageSrc: '',
             cropperInstance: null,
-            
-            showBetaNotice: false
+            showBetaNotice: false,
+            dismissBetaPermanently: false,
+            confirmDialog: { show: false, title: '', message: '', onConfirm: null },
+            alertDialog: { show: false, title: '', message: '' }
         }
     },
     computed: {
@@ -70,30 +58,22 @@ createApp({
         this.fetchData(); 
         this.fetchRooms();
         this.fetchTerminal();
-        
-        if (!localStorage.getItem('lunardesk_beta_dismissed')) {
-            this.showBetaNotice = true;
-        }
-        
+        if (!localStorage.getItem('lunardesk_hide_beta_v3')) { this.showBetaNotice = true; }
         setInterval(() => {
             this.silentAutoSave();
             if(this.activeRoom) this.fetchRoomMessages();
         }, 5000);
-
         const updateActiveCell = (e) => {
             if (!e.target || !e.target.closest) return;
             const cell = e.target.closest('.tc-cell');
-            
             if (cell) {
                 window.currentActiveCell = cell;
                 const bg = window.getComputedStyle(cell).backgroundColor;
                 this.activeCellColor = this.rgbToHex(bg);
-                
                 const mainContainer = document.querySelector('main');
                 if (mainContainer) {
                     const mainRect = mainContainer.getBoundingClientRect();
                     const cellRect = cell.getBoundingClientRect();
-                    
                     this.cellMenuTop = cellRect.top - mainRect.top - 45;
                     this.cellMenuLeft = cellRect.left - mainRect.left;
                     this.showCellMenu = true;
@@ -103,111 +83,67 @@ createApp({
                 window.currentActiveCell = null;
             }
         };
-
         document.addEventListener('click', updateActiveCell);
         document.addEventListener('keyup', updateActiveCell);
-        
-        window.addEventListener('scroll', (e) => {
-            if (e.target.id === 'editor-wrapper') {
-                this.showCellMenu = false;
-            }
-        }, true);
     },
     methods: {
+        showConfirm(title, message, callback) {
+            this.confirmDialog = { show: true, title, message, onConfirm: () => { callback(); this.confirmDialog.show = false; } };
+        },
+        showAlert(title, message) {
+            this.alertDialog = { show: true, title, message };
+        },
         dismissBetaNotice() {
             this.showBetaNotice = false;
-            localStorage.setItem('lunardesk_beta_dismissed', '1');
+            if (this.dismissBetaPermanently) { localStorage.setItem('lunardesk_hide_beta_v3', '1'); }
         },
-        
-        // --- ACCOUNT & USER MANAGEMENT FUNCTIES ---
         async fetchProfile() {
-            try {
-                const res = await fetch('api.php?action=profile');
-                this.currentUser = await res.json();
-                this.profileForm = { ...this.currentUser, password: '' };
-            } catch(e) {}
+            const res = await fetch('api.php?action=profile');
+            this.currentUser = await res.json();
+            this.profileForm = { ...this.currentUser, password: '' };
         },
         async updateProfile() {
             this.loading = true;
-            await fetch('api.php?action=profile', { method: 'PUT', body: JSON.stringify(this.profileForm) });
-            this.showProfileModal = false;
-            await this.fetchProfile();
+            const res = await fetch('api.php?action=profile', { method: 'PUT', body: JSON.stringify(this.profileForm) });
+            const data = await res.json();
+            if(data.success) { this.showProfileModal = false; await this.fetchProfile(); this.showAlert("Sync", "Identity updated."); }
             this.loading = false;
         },
-        async openUsersModal() {
-            this.showUsersModal = true;
-            await this.fetchUsers();
-            this.resetUserForm();
-        },
+        async openUsersModal() { await this.fetchUsers(); this.resetUserForm(); this.showUsersModal = true; },
         async fetchUsers() {
             const res = await fetch('api.php?action=users');
+            if (res.status === 403) return;
             this.userList = await res.json();
         },
-        resetUserForm() {
-            this.editingUser = false;
-            this.userForm = { id: null, username: '', email: '', nickname: '', password: '', role: 'user' };
-        },
-        editUser(user) {
-            this.editingUser = true;
-            this.userForm = { ...user, password: '' };
-        },
-        cancelEditUser() {
-            this.resetUserForm();
-        },
+        resetUserForm() { this.editingUser = false; this.userForm = { id: null, username: '', email: '', nickname: '', password: '', role: 'user' }; },
+        editUser(user) { this.editingUser = true; this.userForm = { ...user, password: '' }; },
+        cancelEditUser() { this.resetUserForm(); },
         async saveUser() {
             this.loading = true;
-            if (this.editingUser) {
-                await fetch('api.php?action=users', { method: 'PUT', body: JSON.stringify(this.userForm) });
-            } else {
-                await fetch('api.php?action=users', { method: 'POST', body: JSON.stringify(this.userForm) });
-                alert("Gebruiker aangemaakt en uitnodiging verzonden!");
-            }
-            await this.fetchUsers();
-            this.resetUserForm();
+            const res = await fetch('api.php?action=users', { method: this.editingUser ? 'PUT' : 'POST', body: JSON.stringify(this.userForm) });
+            const data = await res.json();
+            if (data.success) { await this.fetchUsers(); this.resetUserForm(); }
             this.loading = false;
         },
-        async deleteUser(id) {
-            if (!confirm("Are you sure you want to delete this user permanently?")) return;
-            this.loading = true;
-            await fetch(`api.php?action=users&id=${id}`, { method: 'DELETE' });
-            await this.fetchUsers();
-            this.loading = false;
+        confirmDeleteUser(id) {
+            this.showConfirm("Wipe User", "Terminate this access identity?", async () => {
+                this.loading = true; await fetch(`api.php?action=users&id=${id}`, { method: 'DELETE' }); await this.fetchUsers(); this.loading = false;
+            });
         },
-
         linkify(text) {
             if(!text) return '';
             const urlRegex = /(https?:\/\/[^\s]+)/g;
-            return text.replace(urlRegex, (url) => {
-                return `<a href="${url}" target="_blank" class="chat-link">${url}</a>`;
-            });
+            return text.replace(urlRegex, (url) => `<a href="${url}" target="_blank" class="chat-link">${url}</a>`);
         },
-
-        setCellColor(color) {
-            if (window.currentActiveCell) {
-                window.currentActiveCell.style.backgroundColor = color;
-                this.activeCellColor = color || '#1e293b';
-                this.needsSave = true;
-            }
-        },
-
-        applyCellColor(event) {
-            if (window.currentActiveCell) {
-                window.currentActiveCell.style.backgroundColor = event.target.value;
-                this.needsSave = true;
-            }
-        },
-        
         rgbToHex(rgb) {
             if (!rgb || rgb === 'rgba(0, 0, 0, 0)' || rgb === 'transparent') return '#1e293b';
-            const rgbMatch = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
-            if (!rgbMatch) return rgb; 
-            function hex(x) { return ("0" + parseInt(x).toString(16)).slice(-2); }
-            return "#" + hex(rgbMatch[1]) + hex(rgbMatch[2]) + hex(rgbMatch[3]);
+            const m = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+            if (!m) return rgb; 
+            const h = (x) => ("0" + parseInt(x).toString(16)).slice(-2);
+            return "#" + h(m[1]) + h(m[2]) + h(m[3]);
         },
-
         extractCellColors(outputData) {
             if (!outputData || !outputData.blocks) return outputData;
-            
             const tableBlocks = document.querySelectorAll('.ce-block .tc-table');
             let tableIndex = 0;
             outputData.blocks.forEach(block => {
@@ -219,9 +155,7 @@ createApp({
                         rows.forEach(row => {
                             const cellColorsRow = [];
                             const cells = row.querySelectorAll('.tc-cell');
-                            cells.forEach(cell => {
-                                cellColorsRow.push(cell.style.backgroundColor || '');
-                            });
+                            cells.forEach(cell => { cellColorsRow.push(cell.style.backgroundColor || ''); });
                             block.data.cellColors.push(cellColorsRow);
                         });
                     }
@@ -229,7 +163,6 @@ createApp({
             });
             return outputData;
         },
-
         startDrag(target) {
             this.dragTarget = target;
             document.body.style.userSelect = 'none'; 
@@ -240,475 +173,232 @@ createApp({
         onDrag(e) {
             if (!this.dragTarget) return;
             if (this.dragTarget === 'admin') {
-                let newHeight = window.innerHeight - e.clientY;
-                if (newHeight < 100) newHeight = 100; 
-                if (newHeight > window.innerHeight * 0.8) newHeight = window.innerHeight * 0.8; 
-                this.adminHeight = newHeight;
-            } 
-            else if (this.dragTarget === 'leftCol') {
-                let newWidth = e.clientX;
-                if (newWidth < 200) newWidth = 200; 
-                if (newWidth > 600) newWidth = 600; 
-                this.leftColWidth = newWidth;
-            }
-            else if (this.dragTarget === 'midCol') {
-                let newWidth = e.clientX - this.leftColWidth - 6; 
-                if (newWidth < 150) newWidth = 150;
-                if (newWidth > 600) newWidth = 600;
-                this.midColWidth = newWidth;
+                let h = window.innerHeight - e.clientY;
+                this.adminHeight = Math.max(100, Math.min(h, window.innerHeight * 0.8));
+            } else if (this.dragTarget === 'leftCol') {
+                this.leftColWidth = Math.max(200, Math.min(e.clientX, 600));
+            } else if (this.dragTarget === 'midCol') {
+                this.midColWidth = Math.max(150, Math.min(e.clientX - this.leftColWidth - 6, 600));
             }
         },
         stopDrag() {
             this.dragTarget = null;
-            document.body.style.userSelect = '';
-            document.body.style.cursor = '';
+            document.body.style.userSelect = ''; document.body.style.cursor = '';
             document.removeEventListener('mousemove', this.onDrag);
             document.removeEventListener('mouseup', this.stopDrag);
         },
-
         async fetchTerminal() {
             const res = await fetch('api.php?action=terminal');
             this.adminMessages = await res.json();
-            this.$nextTick(() => {
-                const container = document.getElementById('admin-chat');
-                if(container) container.scrollTop = container.scrollHeight;
-            });
+            this.$nextTick(() => { const c = document.getElementById('admin-chat'); if(c) c.scrollTop = c.scrollHeight; });
         },
-
         async postSystemMsg(content, colorClass) {
             await fetch('api.php?action=terminal', { method: 'POST', body: JSON.stringify({ sender: 'System', content, colorClass }) });
             this.fetchTerminal();
         },
-
         async sendAdminMessage() {
             const msg = this.newAdminMsg.trim();
             if(msg === '') return;
             this.newAdminMsg = '';
-            
+            const senderName = this.currentUser?.nickname || this.currentUser?.username || 'Member';
             if (msg.startsWith('/')) {
-                const parts = msg.split(' ');
-                const cmd = parts[0].toLowerCase();
-                const arg = parts.slice(1).join(' ').trim();
-                
-                await fetch('api.php?action=terminal', { method: 'POST', body: JSON.stringify({ sender: 'Admin', content: msg, colorClass: 'text-purple-400' }) });
-                
+                const parts = msg.split(' '); const cmd = parts[0].toLowerCase(); const arg = parts.slice(1).join(' ').trim();
+                await fetch('api.php?action=terminal', { method: 'POST', body: JSON.stringify({ sender: senderName, content: msg, colorClass: 'text-blue-500' }) });
                 if (cmd === '/create') {
-                    if (!arg) { await this.postSystemMsg("Error: Use /create <name>", "text-red-400"); return; }
+                    if (!arg) { await this.postSystemMsg("Signal Error: /create <name>", "text-red-700"); return; }
                     await fetch('api.php?action=rooms', { method: 'POST', body: JSON.stringify({ title: arg }) });
-                    await this.fetchRooms();
-                    await this.postSystemMsg(`Channel #${arg} successfully created!`, "text-green-400");
-                } 
-                else if (cmd === '/delete') {
-                    if (!arg) { await this.postSystemMsg("Error: Use /delete <name>", "text-red-400"); return; }
-                    const room = this.rooms.find(r => r.title.toLowerCase() === arg.toLowerCase());
-                    if (!room) { await this.postSystemMsg(`Error: Channel #${arg} not found.`, "text-red-400"); return; }
-                    await fetch(`api.php?action=rooms&id=${room.id}`, { method: 'DELETE' });
-                    if(this.activeRoom?.id === room.id) { this.activeRoom = null; this.roomMessages = []; }
-                    await this.fetchRooms();
-                    await this.postSystemMsg(`Channel #${arg} permanently deleted.`, "text-amber-400");
-                }
-                else if (cmd === '/help') {
-                    await this.postSystemMsg("Commands: /create <name>, /delete <name>, /help", "text-blue-400");
-                }
-                else {
-                    await this.postSystemMsg(`Unknown command: ${cmd}.`, "text-red-400");
-                }
-                this.fetchTerminal();
-                return;
+                    await this.fetchRooms(); await this.postSystemMsg(`#${arg} partition ready.`, "text-green-700");
+                } else if (cmd === '/delete') {
+                    if (!arg) { await this.postSystemMsg("Signal Error: /delete <name>", "text-red-700"); return; }
+                    const r = this.rooms.find(room => room.title.toLowerCase() === arg.toLowerCase());
+                    if (!r) { await this.postSystemMsg(`Signal Error: #${arg} unknown.`, "text-red-700"); return; }
+                    await fetch(`api.php?action=rooms&id=${r.id}`, { method: 'DELETE' });
+                    if(this.activeRoom?.id === r.id) { this.activeRoom = null; this.roomMessages = []; }
+                    await this.fetchRooms(); await this.postSystemMsg(`#${arg} partition wiped.`, "text-amber-700");
+                } else if (cmd === '/help') { await this.postSystemMsg("/create <name>, /delete <name>, /help", "text-blue-500");
+                } else { await this.postSystemMsg(`Unknown signal: ${cmd}`, "text-red-700"); }
+                this.fetchTerminal(); return;
             }
-            await fetch('api.php?action=terminal', { method: 'POST', body: JSON.stringify({ sender: 'Admin', content: msg, colorClass: 'text-purple-400' }) });
+            await fetch('api.php?action=terminal', { method: 'POST', body: JSON.stringify({ sender: senderName, content: msg, colorClass: 'text-slate-400' }) });
             this.fetchTerminal();
         },
-
-        async fetchRooms() {
-            const res = await fetch('api.php?action=rooms');
-            this.rooms = await res.json();
-        },
-
-        createRoom() {
-            this.promptTitle = "Channel name?";
-            this.promptInput = "";
-            this.promptAction = 'createRoom';
-            this.showPromptModal = true;
-            this.$nextTick(() => { 
-                if (this.$refs.promptInputRef) this.$refs.promptInputRef.focus(); 
+        async fetchRooms() { const res = await fetch('api.php?action=rooms'); this.rooms = await res.json(); },
+        createRoom() { this.promptTitle = "Initialize Channel"; this.promptInput = ""; this.promptAction = 'createRoom'; this.showPromptModal = true; this.$nextTick(() => { if (this.$refs.promptInputRef) this.$refs.promptInputRef.focus(); }); },
+        selectRoom(room) { this.activeRoom = room; this.fetchRoomMessages(); },
+        confirmClearMessages() {
+            this.showConfirm("Wipe Signal History", `Erase all data in #${this.activeRoom.title}?`, async () => {
+                await fetch(`api.php?action=clear_messages&room_id=${this.activeRoom.id}`, { method: 'DELETE' });
+                this.roomMessages = []; await this.postSystemMsg(`#${this.activeRoom.title} signal wipe complete.`, "text-amber-700");
             });
-        },
-
-        selectRoom(room) {
-            this.activeRoom = room;
-            this.fetchRoomMessages();
-        },
-        async clearRoomMessages() {
-            if(!confirm(`Are you sure you want to clear all messages in stream #${this.activeRoom.title}?`)) return;
-            await fetch(`api.php?action=clear_messages&room_id=${this.activeRoom.id}`, { method: 'DELETE' });
-            this.roomMessages = [];
-            await this.postSystemMsg(`Stream #${this.activeRoom.title} has been cleared.`, "text-amber-400");
         },
         async fetchRoomMessages() {
             if(!this.activeRoom) return;
             try {
                 const res = await fetch(`api.php?action=webhook_messages&room_id=${this.activeRoom.id}`);
-                const newMsgs = await res.json();
-                const isNew = newMsgs.length > this.roomMessages.length;
-                this.roomMessages = newMsgs;
-                if(isNew) {
-                    this.$nextTick(() => {
-                        const container = document.getElementById('webhook-stream');
-                        if(container) container.scrollTop = container.scrollHeight;
-                    });
-                }
+                const msgs = await res.json();
+                const isNew = msgs.length > this.roomMessages.length;
+                this.roomMessages = msgs;
+                if (isNew) this.$nextTick(() => { const c = document.getElementById('webhook-stream'); if(c) c.scrollTop = c.scrollHeight; });
             } catch(e) {}
         },
-        openSettings(room) {
-            this.settingsRoom = room;
-            this.showSettingsModal = true;
-        },
-        getWebhookUrl(key) {
-            const baseUrl = window.location.origin + window.location.pathname.replace('index.php', '');
-            return `${baseUrl}webhook.php?key=${key}`;
-        },
+        openSettings(room) { this.settingsRoom = room; this.showSettingsModal = true; },
+        getWebhookUrl(key) { return `${window.location.origin}${window.location.pathname.replace('index.php', '')}webhook.php?key=${key}`; },
         async generateWebhook() {
             const res = await fetch('api.php?action=webhook_key', { method: 'PUT', body: JSON.stringify({ id: this.settingsRoom.id }) });
-            const data = await res.json();
-            if(data.success) {
-                this.settingsRoom.webhook_key = data.key;
-                this.fetchRooms();
-            }
+            const d = await res.json(); if(d.success) { this.settingsRoom.webhook_key = d.key; this.fetchRooms(); }
         },
-        async deleteWebhook() {
-            if(!confirm("Revoke this webhook? External services will fail to connect.")) return;
-            await fetch(`api.php?action=webhook_key&id=${this.settingsRoom.id}`, { method: 'DELETE' });
-            this.settingsRoom.webhook_key = null;
-            await this.fetchRooms();
+        confirmDeleteWebhook() {
+            this.showConfirm("Revoke Link", "Disable this external signal input?", async () => {
+                await fetch(`api.php?action=webhook_key&id=${this.settingsRoom.id}`, { method: 'DELETE' });
+                this.settingsRoom.webhook_key = null; await this.fetchRooms();
+            });
         },
-        async deleteRoom() {
-            if(!confirm(`Delete channel #${this.settingsRoom.title} and all its messages permanently?`)) return;
-            const title = this.settingsRoom.title;
-            await fetch(`api.php?action=rooms&id=${this.settingsRoom.id}`, { method: 'DELETE' });
-            if(this.activeRoom?.id === this.settingsRoom.id) {
-                this.activeRoom = null;
-                this.roomMessages = [];
-            }
-            this.showSettingsModal = false;
-            await this.postSystemMsg(`Channel #${title} manually deleted.`, "text-amber-400");
-            await this.fetchRooms();
+        confirmDeleteRoom() {
+            this.showConfirm("Destroy Channel", "Erase channel and its documentation forever?", async () => {
+                await fetch(`api.php?action=rooms&id=${this.settingsRoom.id}`, { method: 'DELETE' });
+                if(this.activeRoom?.id === this.settingsRoom.id) { this.activeRoom = null; this.roomMessages = []; }
+                this.showSettingsModal = false; await this.postSystemMsg(`#${this.settingsRoom.title} wiped from existence.`, "text-amber-700"); await this.fetchRooms();
+            });
         },
-
-        getFormattedDateTime() {
-            const now = new Date();
-            return now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        },
-
+        getFormattedDateTime() { return new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }); },
         async fetchData() {
             this.loading = true;
             try {
-                const res = await fetch('api.php');
-                if (res.status === 401) { window.location.reload(); return; }
+                const res = await fetch('api.php'); if (res.status === 401) { window.location.reload(); return; }
                 this.items = await res.json();
-                
-                const urlParams = new URLSearchParams(window.location.search);
-                const pageId = urlParams.get('p');
-                if(pageId && !this.activePage) {
-                    const page = this.items.find(i => i.id == pageId);
-                    if(page) this.selectDoc(page);
-                }
+                const pId = new URLSearchParams(window.location.search).get('p');
+                if(pId && !this.activePage) { const p = this.items.find(i => i.id == pId); if(p) this.selectDoc(p); }
             } catch (e) { }
             this.loading = false;
         },
-
-        getPages(spaceId) { return this.items.filter(i => i.type === 'page' && i.parent_id == spaceId); },
-        getSubpages(pageId) { return this.items.filter(i => i.type === 'subpage' && i.parent_id == pageId); },
-
-        triggerCoverUpload() {
-            document.getElementById('coverUpload').click();
-        },
-        
-        // CROPPER LOGICA START
+        getPages(sId) { return this.items.filter(i => i.type === 'page' && i.parent_id == sId); },
+        getSubpages(pId) { return this.items.filter(i => i.type === 'subpage' && i.parent_id == pId); },
+        triggerCoverUpload() { document.getElementById('coverUpload').click(); },
         handleCoverUpload(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                this.cropImageSrc = event.target.result;
-                this.showCropModal = true;
-                this.$nextTick(() => {
-                    this.initCropper();
-                });
-            };
-            reader.readAsDataURL(file);
-            e.target.value = ''; 
+            const f = e.target.files[0]; if (!f) return;
+            const r = new FileReader();
+            r.onload = (ev) => { this.cropImageSrc = ev.target.result; this.showCropModal = true; this.$nextTick(() => { this.initCropper(); }); };
+            r.readAsDataURL(f); e.target.value = ''; 
         },
         initCropper() {
-            const image = document.getElementById('cropImage');
-            if (this.cropperInstance) {
-                this.cropperInstance.destroy();
-            }
-            this.cropperInstance = new Cropper(image, {
-                aspectRatio: 21 / 9, 
-                viewMode: 1,
-                dragMode: 'move',
-                autoCropArea: 1,
-                restore: false,
-                guides: true,
-                center: true,
-                highlight: false,
-                cropBoxMovable: true,
-                cropBoxResizable: true,
-                toggleDragModeOnDblclick: false,
-            });
+            const img = document.getElementById('cropImage'); if (this.cropperInstance) this.cropperInstance.destroy();
+            this.cropperInstance = new Cropper(img, { aspectRatio: 21 / 9, viewMode: 1, dragMode: 'move', autoCropArea: 1 });
         },
-        cancelCrop() {
-            this.showCropModal = false;
-            if (this.cropperInstance) {
-                this.cropperInstance.destroy();
-                this.cropperInstance = null;
-            }
-            this.cropImageSrc = '';
-        },
+        cancelCrop() { this.showCropModal = false; if (this.cropperInstance) { this.cropperInstance.destroy(); this.cropperInstance = null; } this.cropImageSrc = ''; },
         async applyCrop() {
-            if (!this.cropperInstance) return;
-            this.loading = true;
-            
-            this.cropperInstance.getCroppedCanvas({
-                width: 1920,
-                imageSmoothingEnabled: true,
-                imageSmoothingQuality: 'high',
-            }).toBlob(async (blob) => {
-                const formData = new FormData();
-                formData.append('image', blob, 'banner.jpg');
-                
+            if (!this.cropperInstance) return; this.loading = true;
+            this.cropperInstance.getCroppedCanvas({ width: 1920 }).toBlob(async (blob) => {
+                const fd = new FormData(); fd.append('image', blob, 'banner.jpg');
                 try {
-                    const res = await fetch('api.php?action=upload', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    const data = await res.json();
-                    if (data.success && data.file && data.file.url) {
-                        this.activePage.cover_image = data.file.url;
-                        this.needsSave = true;
-                        this.cancelCrop();
-                    } else {
-                        alert("Upload failed.");
-                    }
-                } catch(err) {
-                    console.error(err);
-                    alert("Upload error.");
-                }
+                    const res = await fetch('api.php?action=upload', { method: 'POST', body: fd });
+                    const d = await res.json();
+                    if (d.success) { this.activePage.cover_image = d.file.url; this.needsSave = true; this.cancelCrop(); }
+                } catch(err) { this.showAlert("Error", "Signal Lost."); }
                 this.loading = false;
             }, 'image/jpeg', 0.85);
         },
-        // CROPPER LOGICA EIND
-
-        removeCover() {
-            if (!confirm("Are you sure you want to remove the banner?")) return;
-            this.activePage.cover_image = '';
-            this.needsSave = true;
+        confirmRemoveBanner() {
+            this.showConfirm("Wipe Identity", "Clear cover banner?", () => { this.activePage.cover_image = ''; this.needsSave = true; });
         },
-        
-        hasCover(page) {
-            return page.cover_image && page.cover_image !== '';
-        },
-        getCoverStyle(page) {
-            if (this.hasCover(page)) {
-                return `background-image: url('${page.cover_image}'); background-size: cover; background-position: center;`;
-            }
-            return '';
-        },
-
+        hasCover(p) { return p.cover_image && p.cover_image !== ''; },
+        getCoverStyle(p) { return this.hasCover(p) ? `background-image: url('${p.cover_image}'); background-size: cover; background-position: center;` : ''; },
         async initEditor(dataBlocks) {
-            if (globalEditorInstance) {
-                try { await globalEditorInstance.isReady; globalEditorInstance.destroy(); } catch(e) { }
-                globalEditorInstance = null;
-            }
+            if (globalEditorInstance) { try { await globalEditorInstance.isReady; globalEditorInstance.destroy(); } catch(e) { } globalEditorInstance = null; }
             document.getElementById('editorjs').innerHTML = '';
-            const fullInlineToolbar = ['link', 'bold', 'italic', 'Color', 'Marker', 'inlineCode'];
+            const bar = ['link', 'bold', 'italic', 'Color', 'Marker', 'inlineCode'];
             globalEditorInstance = new EditorJS({
-                holder: 'editorjs', data: dataBlocks, autofocus: true, minHeight: 500, 
-                onChange: () => { this.needsSave = true; },
-                inlineToolbar: fullInlineToolbar,
+                holder: 'editorjs', data: dataBlocks, autofocus: true, minHeight: 500, onChange: () => { this.needsSave = true; },
+                inlineToolbar: bar,
                 tools: {
-                    header: { class: Header, inlineToolbar: fullInlineToolbar, config: { levels: [1, 2, 3], defaultLevel: 2 } },
-                    list: { class: EditorjsList, inlineToolbar: fullInlineToolbar }, 
-                    checklist: { class: Checklist, inlineToolbar: fullInlineToolbar }, 
-                    code: CodeTool,
-                    table: { class: Table, inlineToolbar: fullInlineToolbar, config: { withHeadings: true } }, 
-                    quote: { class: Quote, inlineToolbar: fullInlineToolbar },
-                    warning: { class: Warning, inlineToolbar: fullInlineToolbar }, 
-                    image: {
-                        class: ImageTool,
-                        config: {
-                            endpoints: {
-                                byFile: 'api.php?action=upload', 
-                            }
-                        }
-                    },
+                    header: { class: Header, inlineToolbar: bar, config: { levels: [1, 2, 3], defaultLevel: 2 } },
+                    list: { class: EditorjsList, inlineToolbar: bar }, 
+                    checklist: { class: Checklist, inlineToolbar: bar }, 
+                    code: CodeTool, table: { class: Table, inlineToolbar: bar, config: { withHeadings: true } }, 
+                    quote: { class: Quote, inlineToolbar: bar }, warning: { class: Warning, inlineToolbar: bar }, 
+                    image: { class: ImageTool, config: { endpoints: { byFile: 'api.php?action=upload' } } },
                     Color: { class: window.ColorPlugin, config: { colorCollections: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#ffffff', '#cbd5e1', '#94a3b8', '#1e293b'], defaultColor: '#3b82f6', type: 'text', customPicker: true } },
                     Marker: { class: window.ColorPlugin, config: { colorCollections: ['#1e293b', '#334155', '#1e3a8a', '#7f1d1d', '#14532d', '#78350f', '#4c1d95', '#831843', '#f59e0b', '#3b82f6'], defaultColor: '#1e3a8a', type: 'marker', customPicker: true } },
                     delimiter: Delimiter, inlineCode: { class: InlineCode }, embed: { class: Embed, inlineToolbar: true }
                 }
             });
-
             globalEditorInstance.isReady.then(() => {
                 setTimeout(() => {
-                    const tableBlocks = document.querySelectorAll('.ce-block .tc-table');
-                    let tableIndex = 0;
-                    dataBlocks.blocks.forEach(block => {
-                        if (block.type === 'table' && block.data.cellColors) {
-                            const domTable = tableBlocks[tableIndex++];
-                            if (domTable) {
-                                const rows = domTable.querySelectorAll('.tc-row');
-                                rows.forEach((row, rIdx) => {
-                                    const cells = row.querySelectorAll('.tc-cell');
-                                    cells.forEach((cell, cIdx) => {
-                                        if (block.data.cellColors[rIdx] && block.data.cellColors[rIdx][cIdx]) {
-                                            cell.style.backgroundColor = block.data.cellColors[rIdx][cIdx];
-                                        }
-                                    });
+                    const blocks = document.querySelectorAll('.ce-block .tc-table'); let idx = 0;
+                    dataBlocks.blocks.forEach(b => {
+                        if (b.type === 'table' && b.data.cellColors) {
+                            const dom = blocks[idx++];
+                            if (dom) {
+                                const rows = dom.querySelectorAll('.tc-row');
+                                rows.forEach((r, ri) => {
+                                    const cells = r.querySelectorAll('.tc-cell');
+                                    cells.forEach((c, ci) => { if (b.data.cellColors[ri] && b.data.cellColors[ri][ci]) c.style.backgroundColor = b.data.cellColors[ri][ci]; });
                                 });
                             }
-                        } else if (block.type === 'table') tableIndex++;
+                        } else if (block.type === 'table') idx++;
                     });
                 }, 300); 
             });
         },
-
-        selectDoc(page) { 
-            const contentToLoad = page.has_draft ? page.draft_content : page.content;
-            
-            this.activePage = { 
-                ...page, 
-                title: page.has_draft ? page.draft_title : page.title,
-                cover_image: page.has_draft ? page.draft_cover_image : page.cover_image
-            }; 
-            this.showCellMenu = false;
-            
-            const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?p=' + page.id;
-            window.history.pushState({ path: newUrl }, '', newUrl);
-
-            let parsedData = { blocks: [] };
-            if (contentToLoad) {
-                try { parsedData = JSON.parse(contentToLoad); } catch(e) { }
-            }
-            if (!parsedData.blocks || parsedData.blocks.length === 0) parsedData.blocks = [{ type: 'paragraph', data: { text: '' } }];
-
+        selectDoc(p) { 
+            const content = p.has_draft ? p.draft_content : p.content;
+            this.activePage = { ...p, title: p.has_draft ? p.draft_title : p.title, cover_image: p.has_draft ? p.draft_cover_image : p.cover_image }; 
+            const url = `${window.location.protocol}//${window.location.host}${window.location.pathname}?p=${p.id}`;
+            window.history.pushState({ path: url }, '', url);
+            let d = { blocks: [] }; if (content) { try { d = JSON.parse(content); } catch(e) { } }
+            if (!d.blocks || d.blocks.length === 0) d.blocks = [{ type: 'paragraph', data: { text: '' } }];
             this.$nextTick(() => {
-                this.initEditor(parsedData);
-                this.lastSavedContent = JSON.stringify(parsedData);
-                this.lastSavedTitle = this.activePage.title;
-                this.lastSavedPublic = this.activePage.is_public;
-                this.lastSavedCover = this.activePage.cover_image;
-                this.lastSaveTime = null; 
-                this.needsSave = false;
+                this.initEditor(d); this.lastSavedContent = JSON.stringify(d); this.lastSavedTitle = this.activePage.title;
+                this.lastSavedPublic = this.activePage.is_public; this.lastSavedCover = this.activePage.cover_image; this.lastSaveTime = null; this.needsSave = false;
             });
         },
-
-        createItem(type, parentId = null) {
-            if (type === 'space') {
-                this.promptTitle = "Space Name?";
-            } else if (type === 'page') {
-                this.promptTitle = "Page Name?";
-            } else if (type === 'subpage') {
-                this.promptTitle = "Subpage Name?";
-            }
-
-            this.promptInput = "";
-            this.promptAction = 'createItem';
-            this.promptPayload = { type, parentId };
-            this.showPromptModal = true;
-            this.$nextTick(() => { 
-                if (this.$refs.promptInputRef) this.$refs.promptInputRef.focus(); 
-            });
+        createItem(type, pId = null) {
+            this.promptTitle = type === 'space' ? "New Partition" : "New Node";
+            this.promptInput = ""; this.promptAction = 'createItem'; this.promptPayload = { type, pId };
+            this.showPromptModal = true; this.$nextTick(() => { if (this.$refs.promptInputRef) this.$refs.promptInputRef.focus(); });
         },
-
         async submitPrompt() {
-            const title = this.promptInput.trim();
-            if (!title) return;
-            
-            this.showPromptModal = false;
-
+            const t = this.promptInput.trim(); if (!t) return; this.showPromptModal = false;
             if (this.promptAction === 'createRoom') {
-                await fetch('api.php?action=rooms', { method: 'POST', body: JSON.stringify({ title }) });
-                await this.postSystemMsg(`Channel #${title} manually created.`, "text-green-400");
-                await this.fetchRooms();
-            } 
-            else if (this.promptAction === 'createItem') {
-                this.loading = true;
-                const type = this.promptPayload.type;
-                const parentId = this.promptPayload.parentId;
-                await fetch('api.php', { method: 'POST', body: JSON.stringify({ title, type, parent_id: parentId }) });
+                await fetch('api.php?action=rooms', { method: 'POST', body: JSON.stringify({ title: t }) });
+                await this.postSystemMsg(`#${t} signals initialized.`, "text-blue-500"); await this.fetchRooms();
+            } else if (this.promptAction === 'createItem') {
+                this.loading = true; await fetch('api.php', { method: 'POST', body: JSON.stringify({ title: t, type: this.promptPayload.type, parent_id: this.promptPayload.pId }) });
                 await this.fetchData();
             }
         },
-        
         async silentAutoSave() {
             if (this.activePage && globalEditorInstance) {
-                let titleOrPublicChanged = (this.activePage.title !== this.lastSavedTitle || this.activePage.is_public !== this.lastSavedPublic);
-                let coverChanged = (this.activePage.cover_image !== this.lastSavedCover);
-                
-                if (this.needsSave || titleOrPublicChanged || coverChanged) {
+                let changed = (this.activePage.title !== this.lastSavedTitle || this.activePage.is_public !== this.lastSavedPublic || this.activePage.cover_image !== this.lastSavedCover);
+                if (this.needsSave || changed) {
                     try {
-                        const rawOutput = await globalEditorInstance.save();
-                        const outputData = this.extractCellColors(rawOutput); 
-                        const outputStr = JSON.stringify(outputData);
-                        
-                        await fetch('api.php', { method: 'PUT', body: JSON.stringify({ ...this.activePage, content: outputStr, action: 'draft' }) });
-                        
-                        this.lastSavedContent = outputStr; 
-                        this.lastSavedTitle = this.activePage.title;
-                        this.lastSavedPublic = this.activePage.is_public; 
-                        this.lastSavedCover = this.activePage.cover_image;
-                        this.lastSaveTime = this.getFormattedDateTime();
-                        this.needsSave = false; 
-                        this.activePage.has_draft = 1;
-                        
-                        const index = this.items.findIndex(i => i.id === this.activePage.id);
-                        if(index !== -1) {
-                            this.items[index].has_draft = 1;
-                            this.items[index].draft_title = this.activePage.title;
-                            this.items[index].draft_content = outputStr;
-                            this.items[index].draft_cover_image = this.activePage.cover_image;
-                        }
-                    } catch (e) { 
-                        console.error("AutoSave Error:", e);
-                    }
+                        const raw = await globalEditorInstance.save(); const out = this.extractCellColors(raw); const str = JSON.stringify(out);
+                        await fetch('api.php', { method: 'PUT', body: JSON.stringify({ ...this.activePage, content: str, action: 'draft' }) });
+                        this.lastSavedContent = str; this.lastSavedTitle = this.activePage.title; this.lastSavedPublic = this.activePage.is_public; 
+                        this.lastSavedCover = this.activePage.cover_image; this.lastSaveTime = this.getFormattedDateTime(); this.needsSave = false; this.activePage.has_draft = 1;
+                        const idx = this.items.findIndex(i => i.id === this.activePage.id);
+                        if(idx !== -1) { this.items[idx].has_draft = 1; this.items[idx].draft_title = this.activePage.title; this.items[idx].draft_content = str; this.items[idx].draft_cover_image = this.activePage.cover_image; }
+                    } catch (e) { }
                 }
             }
         },
-
         async manualPublish() {
             this.loading = true; 
             if (globalEditorInstance) {
                 try {
-                    const rawOutput = await globalEditorInstance.save();
-                    const outputData = this.extractCellColors(rawOutput); 
-                    const outputStr = JSON.stringify(outputData);
-                    
-                    await fetch('api.php', { method: 'PUT', body: JSON.stringify({ ...this.activePage, content: outputStr, action: 'publish' }) });
-                    
-                    this.lastSavedContent = outputStr; 
-                    this.lastSavedTitle = this.activePage.title;
-                    this.lastSavedPublic = this.activePage.is_public; 
-                    this.lastSavedCover = this.activePage.cover_image;
-                    this.lastSaveTime = this.getFormattedDateTime();
-                    this.needsSave = false; 
-                    this.activePage.has_draft = 0; 
-                } catch (e) { 
-                    console.error("Publish Error:", e);
-                    alert("Er ging iets mis bij het publiceren! Controleer de developer console.");
-                }
+                    const raw = await globalEditorInstance.save(); const out = this.extractCellColors(raw); const str = JSON.stringify(out);
+                    await fetch('api.php', { method: 'PUT', body: JSON.stringify({ ...this.activePage, content: str, action: 'publish' }) });
+                    this.lastSavedContent = str; this.lastSavedTitle = this.activePage.title; this.lastSavedPublic = this.activePage.is_public; 
+                    this.lastSavedCover = this.activePage.cover_image; this.lastSaveTime = this.getFormattedDateTime(); this.needsSave = false; this.activePage.has_draft = 0; 
+                    this.showAlert("Documentation Active", "The live view has been synchronized.");
+                } catch (e) { }
             }
-            await this.fetchData(); 
-            this.loading = false;
+            await this.fetchData(); this.loading = false;
         },
-
-        async deleteItem(id, type) {
-            if (!confirm("Delete?")) return;
-            this.loading = true;
-            await fetch(`api.php?id=${id}`, { method: 'DELETE' });
-            this.activePage = null;
-            await this.fetchData();
+        confirmDelete(id, type) {
+            this.showConfirm("Final Wipe", "Permanently erase this data node?", async () => {
+                this.loading = true; await fetch(`api.php?id=${id}`, { method: 'DELETE' });
+                this.activePage = null; await this.fetchData();
+            });
         }
     }
 }).mount('#app');
