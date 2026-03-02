@@ -71,7 +71,7 @@ $metaText = implode(' ', $metaParts);
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/list@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/editorjs-text-color-plugin@2.0.4/dist/bundle.js"></script>
     
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="assets/style.css">
 </head>
 <body class="bg-slate-950 text-slate-300 flex h-screen overflow-hidden">
     <aside id="sidebar" class="w-80 bg-slate-900 border-r border-slate-950 shrink-0 h-full overflow-y-auto flex flex-col">
@@ -87,11 +87,11 @@ $metaText = implode(' ', $metaParts);
             <?php foreach (array_filter($items, fn($i) => $i['type'] === 'space') as $space): ?>
                 <?php $spages = array_filter($items, fn($i) => $i['type'] === 'page' && $i['parent_id'] == $space['id'] && $i['is_public'] == 1); ?>
                 <?php if (empty($spages)) continue; ?>
-                <div><h3 class="text-[10px] font-black text-slate-700 uppercase tracking-widest mb-3 ml-3"><?php echo $space['title']; ?></h3>
+                <div><h3 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 ml-3"><?php echo $space['title']; ?></h3>
                     <ul class="space-y-1">
                         <?php foreach ($spages as $sp): ?>
                             <li class="nav-item">
-                                <a href="?s=<?php echo $sp['slug']; ?>" class="flex items-center px-4 py-2 text-sm <?php echo $sp['slug'] == $slug ? 'bg-slate-950 text-white font-bold nav-item-active shadow-inner' : 'text-slate-600 hover:text-white'; ?>">
+                                <a href="?s=<?php echo $sp['slug']; ?>" class="flex items-center px-4 py-2 text-base <?php echo $sp['slug'] == $slug ? 'bg-slate-950 text-white font-bold nav-item-active shadow-inner' : 'text-slate-400 hover:text-slate-100'; ?>">
                                     <?php echo $sp['title']; ?>
                                 </a>
                                 <?php $subpages = array_filter($items, fn($i) => $i['type'] === 'subpage' && $i['parent_id'] == $sp['id'] && $i['is_public'] == 1); ?>
@@ -99,7 +99,7 @@ $metaText = implode(' ', $metaParts);
                                     <ul class="mt-1 ml-4 space-y-1">
                                         <?php foreach ($subpages as $subp): ?>
                                             <li class="nav-item">
-                                                <a href="?s=<?php echo $subp['slug']; ?>" class="flex items-center pl-4 pr-2 py-1.5 text-xs <?php echo $subp['slug'] == $slug ? 'bg-slate-950 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-600 hover:text-slate-400'; ?>">
+                                                <a href="?s=<?php echo $subp['slug']; ?>" class="flex items-center pl-4 pr-2 py-1.5 text-sm <?php echo $subp['slug'] == $slug ? 'bg-slate-950 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-400 hover:text-slate-200'; ?>">
                                                     <?php echo $subp['title']; ?>
                                                 </a>
                                             </li>
@@ -114,8 +114,8 @@ $metaText = implode(' ', $metaParts);
         </div>
         
         <div class="mt-auto p-6 border-t border-slate-950">
-            <span class="block text-[9px] text-slate-700 font-black uppercase tracking-[0.3em] mb-2">LunarDesk &bull; <?php echo $app_version; ?></span>
-            <span class="block text-[9px] text-slate-700 font-black uppercase tracking-[0.3em]">2026 &copy; Ported by <a href="https://github.com/ByAldon" target="_blank" class="hover:text-blue-500 transition-colors">Aldon</a></span>
+            <span class="block text-[9px] text-slate-500 font-black uppercase tracking-[0.3em] mb-2">LunarDesk &bull; <?php echo $app_version; ?></span>
+            <span class="block text-[9px] text-slate-500 font-black uppercase tracking-[0.3em]">2026 &copy; Ported by <a href="https://github.com/ByAldon" target="_blank" class="hover:text-blue-400 transition-colors">Aldon</a></span>
         </div>
     </aside>
     <main class="flex-1 h-full overflow-y-auto flex flex-col">
