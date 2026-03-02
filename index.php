@@ -181,15 +181,32 @@ include 'version.php';
                                     {{ hasCover(activePage) ? 'Change Banner' : 'Add Banner' }}
                                 </button>
                             </div>
+                            <div class="absolute bottom-8 left-12 z-20">
+                                <div class="inline-flex items-center gap-3">
+                                    <button
+                                        @click="focusTitleInput"
+                                        type="button"
+                                        aria-label="Edit title"
+                                        title="Edit title"
+                                        class="shrink-0 bg-slate-800/90 border border-slate-500 backdrop-blur-md hover:bg-slate-700 text-white p-2.5 rounded-xl shadow-2xl transition-all"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 11l6.768-6.768a2.5 2.5 0 113.536 3.536L12.536 14.536a4 4 0 01-1.414.944L7 17l1.52-4.122A4 4 0 019.464 11z" />
+                                        </svg>
+                                    </button>
+                                    <input
+                                        ref="pageTitleInput"
+                                        v-model="activePage.title"
+                                        placeholder="Untitled Page"
+                                        class="text-4xl md:text-5xl font-black bg-transparent text-white outline-none w-[min(55vw,32rem)] placeholder-slate-300 transition-all border-none focus:ring-0 drop-shadow-2xl"
+                                    >
+                                </div>
+                            </div>
                         </header>
 
                         <div class="sticky top-0 bg-slate-800/95 backdrop-blur-md z-30 p-4 px-12 flex justify-between items-center border-b border-slate-700 shadow-md">
                             <div class="flex flex-col gap-2">
                                 <div class="flex items-center gap-6">
-                                    <label class="flex items-center text-[10px] font-black uppercase text-slate-300 gap-3 cursor-pointer hover:text-white transition-colors">
-                                        <span>Live</span>
-                                        <input type="checkbox" v-model="activePage.is_public" @change="autoSave" :true-value="1" :false-value="0" class="accent-blue-500 w-5 h-5 rounded-md cursor-pointer">
-                                    </label>
                                     <span v-if="lastSaveTime" class="text-blue-400 font-mono text-[10px] tracking-widest uppercase">Signal: {{ lastSaveTime }}</span>
                                     <span v-if="activePage.has_draft == 1" class="text-amber-500 font-black animate-pulse uppercase text-[10px] tracking-widest bg-amber-500/10 px-3 py-1 rounded-md">Unpublished</span>
                                 </div>
@@ -197,6 +214,10 @@ include 'version.php';
                             </div>
                             
                             <div class="flex items-center gap-3">
+                                <label class="flex items-center text-[10px] font-black uppercase text-slate-300 gap-3 cursor-pointer hover:text-white transition-colors bg-slate-700/60 px-4 py-3 rounded-xl border border-slate-600">
+                                    <span>Live</span>
+                                    <input type="checkbox" v-model="activePage.is_public" @change="autoSave" :true-value="1" :false-value="0" class="accent-blue-500 w-5 h-5 rounded-md cursor-pointer">
+                                </label>
                                 <span v-if="publishNotice" class="text-emerald-400 font-mono text-[10px] tracking-widest uppercase">{{ publishNotice }}</span>
                                 <template v-if="activePage.is_public == 1">
                                     <button @click="copyPublicLink" class="bg-slate-700 hover:bg-slate-600 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-2 border border-slate-600">
@@ -214,7 +235,6 @@ include 'version.php';
                         </div>
 
                         <div class="p-12 px-20 max-w-5xl mx-auto w-full pb-32" @click.self="focusEditor">
-                            <input v-model="activePage.title" placeholder="Untitled Page" class="text-5xl font-black bg-transparent text-white outline-none w-full mb-10 placeholder-slate-600 transition-all border-none focus:ring-0">
                             <div id="editorjs" class="w-full"></div>
                         </div>
                     </div>

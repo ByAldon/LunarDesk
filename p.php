@@ -73,10 +73,10 @@ $metaText = implode(' ', $metaParts);
     
     <link rel="stylesheet" href="assets/style.css">
 </head>
-<body class="bg-slate-950 text-slate-300 flex h-screen overflow-hidden">
-    <aside id="sidebar" class="w-80 bg-slate-900 border-r border-slate-950 shrink-0 h-full overflow-y-auto flex flex-col">
+<body class="bg-slate-900 text-slate-300 flex h-screen overflow-hidden selection:bg-blue-500/30 p-6 gap-2">
+    <aside id="sidebar" class="w-80 bg-slate-800/80 border border-slate-700 shadow-2xl shrink-0 h-full overflow-y-auto flex flex-col rounded-3xl">
         
-        <div class="h-16 px-6 flex items-center shrink-0 border-b border-slate-950 gap-3">
+        <div class="h-16 px-6 flex items-center shrink-0 border-b border-slate-700/50 bg-slate-900/60 gap-3">
             <div class="bg-blue-600 p-1.5 rounded-lg shadow-lg shadow-blue-500/20">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-4 h-4"><path d="M 350 256 A 110 110 0 1 1 220 140 A 130 130 0 0 0 350 256 Z" fill="#93c5fd" opacity="0.9"/><path d="M 190 170 V 330 H 310" fill="none" stroke="#ffffff" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
@@ -87,11 +87,11 @@ $metaText = implode(' ', $metaParts);
             <?php foreach (array_filter($items, fn($i) => $i['type'] === 'space') as $space): ?>
                 <?php $spages = array_filter($items, fn($i) => $i['type'] === 'page' && $i['parent_id'] == $space['id'] && $i['is_public'] == 1); ?>
                 <?php if (empty($spages)) continue; ?>
-                <div><h3 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 ml-3"><?php echo $space['title']; ?></h3>
+                <div><h3 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-3"><?php echo $space['title']; ?></h3>
                     <ul class="space-y-1">
                         <?php foreach ($spages as $sp): ?>
                             <li class="nav-item">
-                                <a href="?s=<?php echo $sp['slug']; ?>" class="flex items-center px-4 py-2 text-base <?php echo $sp['slug'] == $slug ? 'bg-slate-950 text-white font-bold nav-item-active shadow-inner' : 'text-slate-400 hover:text-slate-100'; ?>">
+                                <a href="?s=<?php echo $sp['slug']; ?>" class="rounded-xl transition-all flex items-center px-4 py-2 text-base <?php echo $sp['slug'] == $slug ? 'bg-blue-600/20 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'; ?>">
                                     <?php echo $sp['title']; ?>
                                 </a>
                                 <?php $subpages = array_filter($items, fn($i) => $i['type'] === 'subpage' && $i['parent_id'] == $sp['id'] && $i['is_public'] == 1); ?>
@@ -99,7 +99,7 @@ $metaText = implode(' ', $metaParts);
                                     <ul class="mt-1 ml-4 space-y-1">
                                         <?php foreach ($subpages as $subp): ?>
                                             <li class="nav-item">
-                                                <a href="?s=<?php echo $subp['slug']; ?>" class="flex items-center pl-4 pr-2 py-1.5 text-sm <?php echo $subp['slug'] == $slug ? 'bg-slate-950 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-400 hover:text-slate-200'; ?>">
+                                                <a href="?s=<?php echo $subp['slug']; ?>" class="rounded-xl transition-all flex items-center pl-4 pr-2 py-1.5 text-sm <?php echo $subp['slug'] == $slug ? 'bg-blue-600/20 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'; ?>">
                                                     <?php echo $subp['title']; ?>
                                                 </a>
                                             </li>
@@ -113,20 +113,20 @@ $metaText = implode(' ', $metaParts);
             <?php endforeach; ?>
         </div>
         
-        <div class="mt-auto p-6 border-t border-slate-950">
+        <div class="mt-auto p-6 border-t border-slate-700/50 bg-slate-900/40">
             <span class="block text-[9px] text-slate-500 font-black uppercase tracking-[0.3em] mb-2">LunarDesk &bull; <?php echo $app_version; ?></span>
             <span class="block text-[9px] text-slate-500 font-black uppercase tracking-[0.3em]">2026 &copy; Ported by <a href="https://github.com/ByAldon" target="_blank" class="hover:text-blue-400 transition-colors">Aldon</a></span>
         </div>
     </aside>
-    <main class="flex-1 h-full overflow-y-auto flex flex-col">
-        <header class="h-80 shrink-0 bg-slate-900 relative" <?php if($page['cover_image']) echo "style='background:url({$page['cover_image']}) center/cover'"; ?>>
-            <div class="absolute inset-0 bg-slate-950/40"></div>
+    <main class="bg-slate-800/80 border border-slate-700 shadow-2xl rounded-3xl flex-1 h-full overflow-y-auto flex flex-col">
+        <header class="h-80 shrink-0 bg-transparent relative overflow-hidden" <?php if($page['cover_image']) echo "style='background:url({$page['cover_image']}) center/cover'"; ?>>
+            <div class="absolute inset-0 bg-gradient-to-t from-slate-800 to-transparent"></div>
             <div class="absolute bottom-10 left-12">
                 <h1 class="text-6xl font-black text-white drop-shadow-2xl"><?php echo htmlspecialchars($page['title']); ?></h1>
                 <p class="mt-3 text-xs uppercase tracking-[0.18em] text-slate-300/90"><?php echo htmlspecialchars($metaText); ?></p>
             </div>
         </header>
-        <div class="p-12 max-w-4xl mx-auto w-full"><div id="editorjs"></div></div>
+        <div class="p-12 px-20 max-w-5xl mx-auto w-full pb-32"><div id="editorjs"></div></div>
     </main>
     <script>
         const content = <?php echo $page['content'] ?: '{"blocks":[]}'; ?>;

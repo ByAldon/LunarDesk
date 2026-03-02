@@ -68,6 +68,12 @@ createApp({
         window.addEventListener('mouseup', this.stopDrag);
     },
     methods: {
+        focusTitleInput() {
+            this.$nextTick(() => {
+                const input = this.$refs.pageTitleInput;
+                if (input && typeof input.focus === 'function') input.focus();
+            });
+        },
         switchTab(tab) {
             this.activeLeftTab = tab;
             if (tab === 'stream') {
