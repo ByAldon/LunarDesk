@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // index.php
 require_once 'auth.php';
 include 'version.php';
@@ -14,7 +14,8 @@ include 'version.php';
     <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/editorjs@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@editorjs/header@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/paragraph@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/header@2.8.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/checklist@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/code@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/table@latest"></script>
@@ -27,10 +28,10 @@ include 'version.php';
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/embed@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/list@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/editorjs-text-color-plugin@2.0.4/dist/bundle.js"></script>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="assets/style.css">
     <style>[v-cloak]{display:none!important;}</style>
 </head>
-<body class="bg-slate-900 h-screen overflow-hidden text-slate-300 selection:bg-blue-500/30">
+<body class="bg-slate-800 h-screen overflow-hidden text-slate-300 selection:bg-blue-500/30">
     <div id="app" class="flex flex-col h-full w-full relative" v-cloak>
         
         <header class="h-20 shrink-0 flex items-center justify-between px-8 z-30 relative bg-transparent">
@@ -50,9 +51,9 @@ include 'version.php';
         </header>
 
         <div class="flex-1 flex overflow-hidden w-full relative px-6 pb-6 gap-2">
-            <aside class="bg-slate-800/80 border border-slate-700 shadow-2xl flex flex-col shrink-0 z-10 relative rounded-3xl overflow-hidden" :style="{ width: leftColWidth + 'px' }">
+            <aside class="bg-slate-700/80 border border-slate-600 shadow-2xl flex flex-col shrink-0 z-10 relative rounded-3xl overflow-hidden" :style="{ width: leftColWidth + 'px' }">
                 
-                <div class="flex items-center border-b border-slate-700/50 bg-slate-900/60 shrink-0">
+                <div class="flex items-center border-b border-slate-600/50 bg-slate-800/60 shrink-0">
                     <button @click="switchTab('stream')" class="flex-1 py-4 px-4 text-[10px] font-black uppercase tracking-widest transition-colors relative flex justify-center items-center gap-2" :class="activeLeftTab === 'stream' ? 'text-blue-400 bg-slate-800/80 shadow-[inset_0_2px_0_0_#3b82f6]' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/40'">
                         Stream
                         <span v-if="hasUnreadStream" class="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-lg shadow-red-500/50"></span>
@@ -66,7 +67,7 @@ include 'version.php';
 
                 <div v-show="activeLeftTab === 'stream'" class="flex-1 flex flex-col overflow-hidden">
                     
-                    <div class="flex flex-col shrink-0 border-b border-slate-700/50 bg-slate-900/20" :style="{ height: channelsHeight + 'px' }">
+                    <div class="flex flex-col shrink-0 border-b border-slate-600/50 bg-slate-800/20" :style="{ height: channelsHeight + 'px' }">
                         <div class="p-6 flex justify-between items-center"><span class="font-black text-[10px] uppercase tracking-[0.2em] text-slate-400">Channels</span><button @click="createRoom" class="text-slate-400 hover:text-white transition-colors">+</button></div>
                         <div class="flex-1 overflow-y-auto px-4 space-y-1 pb-4">
                             <div v-for="room in rooms" :key="room.id" @click="selectRoom(room)" class="nav-item px-4 py-3 rounded-xl cursor-pointer text-sm flex justify-between items-center group transition-all" :class="activeRoom?.id === room.id ? 'bg-blue-600/20 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'">
@@ -81,15 +82,16 @@ include 'version.php';
                     
                     <div class="flex-1 flex flex-col overflow-hidden relative bg-slate-900/40">
                         <div class="absolute top-2 right-4 z-10">
-                            <button v-if="activeRoom && roomMessages.length > 0" @click="confirmClearMessages" class="text-[9px] uppercase font-bold text-slate-400 hover:text-red-400 transition-colors bg-slate-800/80 px-2 py-1 rounded-lg border border-slate-700 backdrop-blur-sm">Wipe</button>
+                            <button v-if="currentUser?.role === 'admin' && activeRoom && roomMessages.length > 0" @click="confirmClearMessages" class="text-[9px] uppercase font-bold text-slate-400 hover:text-red-400 transition-colors bg-slate-800/80 px-2 py-1 rounded-lg border border-slate-700 backdrop-blur-sm">Wipe</button>
                         </div>
                         <div class="flex-1 overflow-y-auto p-4 space-y-4" id="webhook-stream">
-                            <div v-for="msg in roomMessages" :key="msg.id" class="group">
-                                <div class="flex items-baseline gap-2 mb-1">
+                            <div v-for="msg in roomMessages" :key="msg.id" class="group relative">
+                                <button v-if="currentUser?.role === 'admin'" @click.stop="confirmDeleteMessage(msg)" class="absolute right-1 top-1 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-400 text-xs font-black leading-none transition-opacity bg-slate-800/70 px-1.5 py-1 rounded-md border border-slate-600" aria-label="Delete message">&times;</button>
+                                <div class="flex items-baseline gap-2 mb-1 pr-8">
                                     <span class="text-[10px] font-black text-blue-400 uppercase tracking-tighter">{{ msg.sender }}</span>
                                     <span class="text-[9px] text-slate-500 font-medium uppercase ml-2">{{ new Date(msg.created_at).toLocaleTimeString() }}</span>
                                 </div>
-                                <div class="font-mono text-slate-300 text-xs leading-relaxed break-words bg-slate-800 p-4 rounded-xl border border-slate-700" v-html="linkify(msg.content)"></div>
+                                <div class="font-mono text-slate-200 text-xs leading-relaxed break-words bg-slate-700/95 p-4 rounded-xl border border-slate-500 shadow-[0_0_0_1px_rgba(148,163,184,0.25),0_6px_16px_rgba(2,6,23,0.35)]" v-html="linkify(msg.content)"></div>
                             </div>
                             <div v-if="!activeRoom" class="text-center text-slate-600 text-[10px] uppercase font-bold mt-10 tracking-widest">Select a channel</div>
                             <div v-else-if="roomMessages.length === 0" class="text-center text-slate-600 text-[10px] uppercase font-bold mt-10 tracking-widest">No messages yet</div>
@@ -97,13 +99,16 @@ include 'version.php';
                     </div>
                 </div>
 
-                <div v-show="activeLeftTab === 'terminal'" class="flex-1 flex flex-col overflow-hidden bg-slate-900/40">
+                <div v-show="activeLeftTab === 'terminal'" class="flex-1 flex flex-col overflow-hidden bg-slate-700/40">
                     <div class="flex-1 overflow-y-auto px-4 py-4 space-y-2" id="admin-chat">
-                        <div v-for="chat in adminMessages" :key="chat.id" class="text-xs leading-relaxed"><span :class="[chat.colorClass, 'font-black mr-2 uppercase tracking-tighter text-[10px]']">{{ chat.sender }}:</span><span class="text-slate-400" v-html="linkify(chat.content)"></span></div>
+                        <div v-for="chat in adminMessages" :key="chat.id" class="group relative text-xs leading-relaxed">
+                            <button v-if="currentUser?.role === 'admin'" @click.stop="confirmDeleteAdminMessage(chat)" class="absolute right-1 top-0 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-400 text-xs font-black leading-none transition-opacity bg-slate-800/70 px-1.5 py-1 rounded-md border border-slate-600" aria-label="Delete terminal message">&times;</button>
+                            <div class="pr-8"><span :class="[chat.colorClass, 'font-black mr-2 uppercase tracking-tighter text-[10px]']">{{ chat.sender }}:</span><span class="text-slate-300" v-html="linkify(chat.content)"></span></div>
+                        </div>
                     </div>
-                    <div class="p-4 border-t border-slate-700/50 bg-slate-800/30">
+                    <div class="p-4 border-t border-slate-600/50 bg-slate-700/30">
                         <form @submit.prevent="sendAdminMessage">
-                            <input v-model="newAdminMsg" type="text" placeholder="Enter command..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-5 py-3 text-xs text-white outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 font-mono transition-all placeholder-slate-500 shadow-inner">
+                            <input v-model="newAdminMsg" type="text" placeholder="Enter command..." class="w-full bg-slate-600/95 border border-slate-400 rounded-xl px-5 py-3 text-xs text-white outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/60 font-mono transition-all placeholder-slate-300 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.25),0_6px_14px_rgba(2,6,23,0.3)]">
                         </form>
                     </div>
                 </div>
@@ -112,7 +117,7 @@ include 'version.php';
 
             <div @mousedown="startDrag('leftCol')" class="w-2 cursor-col-resize z-50 shrink-0 flex items-center justify-center group"><div class="w-1 h-12 rounded-full bg-slate-700 group-hover:bg-blue-500/50 transition-colors"></div></div>
 
-            <aside class="bg-slate-800/80 border border-slate-700 shadow-2xl flex flex-col shrink-0 z-20 relative rounded-3xl overflow-hidden" :style="{ width: midColWidth + 'px' }">
+            <aside class="bg-slate-700/80 border border-slate-600 shadow-2xl flex flex-col shrink-0 z-20 relative rounded-3xl overflow-hidden" :style="{ width: midColWidth + 'px' }">
                 <div class="flex flex-col h-full p-6">
                     <button @click="createItem('space')" class="bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl text-xs font-black uppercase tracking-widest mb-8 shadow-lg shadow-blue-500/20 transition-all">+ New Space</button>
                     <div class="flex-1 overflow-y-auto space-y-8 pr-2">
@@ -120,7 +125,7 @@ include 'version.php';
                             <div class="flex justify-between items-center group mb-4 px-2">
                                 <span class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{{ space.title }}</span>
                                 <div class="hidden group-hover:flex items-center gap-2">
-                                    <button @click.stop="createItem('page', space.id)" class="text-slate-400 hover:text-blue-400 transition-colors text-lg leading-none px-1">+</button>
+                                    <button @click.stop="createItem('page', space.id)" class="text-slate-200 hover:text-white bg-slate-700/70 hover:bg-blue-600/30 transition-colors text-lg leading-none px-2 rounded-md">+</button>
                                     <button @click.stop="confirmDelete(space.id, 'space')" class="text-slate-400 hover:text-red-400 transition-colors">x</button>
                                 </div>
                             </div>
@@ -137,7 +142,7 @@ include 'version.php';
                                                 <span v-if="page.is_public == 1" class="text-[8px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-black uppercase">Live</span>
                                                 <button @click.stop="moveItem(page, 'up', 'page', space.id)" class="hidden group-hover:block text-slate-400 hover:text-blue-400 text-base leading-none transition-colors px-1">↑</button>
                                                 <button @click.stop="moveItem(page, 'down', 'page', space.id)" class="hidden group-hover:block text-slate-400 hover:text-blue-400 text-base leading-none transition-colors px-1">↓</button>
-                                                <button @click.stop="createItem('subpage', page.id)" class="hidden group-hover:block text-slate-400 hover:text-blue-400 text-2xl font-light leading-none transition-colors px-1">+</button>
+                                                <button @click.stop="createItem('subpage', page.id)" class="hidden group-hover:block text-slate-200 hover:text-white bg-slate-700/70 hover:bg-blue-600/30 text-2xl font-light leading-none transition-colors px-2 rounded-md">+</button>
                                             </div>
                                         </div>
                                         <ul class="mt-2 ml-4 space-y-1 border-l border-slate-700 pl-2">
@@ -152,7 +157,7 @@ include 'version.php';
                                                 <div class="hidden group-hover:flex items-center gap-1">
                                                     <button @click.stop="moveItem(node.item, 'up', 'subpage', node.parentId)" class="text-slate-400 hover:text-blue-400 text-base leading-none transition-colors px-1">↑</button>
                                                     <button @click.stop="moveItem(node.item, 'down', 'subpage', node.parentId)" class="text-slate-400 hover:text-blue-400 text-base leading-none transition-colors px-1">↓</button>
-                                                    <button @click.stop="createItem('subpage', node.item.id)" class="text-slate-400 hover:text-blue-400 text-lg leading-none transition-colors px-1">+</button>
+                                                    <button @click.stop="createItem('subpage', node.item.id)" class="text-slate-200 hover:text-white bg-slate-700/70 hover:bg-blue-600/30 text-lg leading-none transition-colors px-2 rounded-md">+</button>
                                                 </div>
                                             </li>
                                         </ul>
@@ -183,17 +188,6 @@ include 'version.php';
                             </div>
                             <div class="absolute bottom-8 left-12 z-20">
                                 <div class="inline-flex items-center gap-3">
-                                    <button
-                                        @click="focusTitleInput"
-                                        type="button"
-                                        aria-label="Edit title"
-                                        title="Edit title"
-                                        class="shrink-0 bg-slate-800/90 border border-slate-500 backdrop-blur-md hover:bg-slate-700 text-white p-2.5 rounded-xl shadow-2xl transition-all"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 11l6.768-6.768a2.5 2.5 0 113.536 3.536L12.536 14.536a4 4 0 01-1.414.944L7 17l1.52-4.122A4 4 0 019.464 11z" />
-                                        </svg>
-                                    </button>
                                     <input
                                         ref="pageTitleInput"
                                         v-model="activePage.title"

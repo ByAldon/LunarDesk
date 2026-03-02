@@ -57,7 +57,8 @@ $metaText = implode(' ', $metaParts);
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/editorjs@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@editorjs/header@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/paragraph@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/header@2.8.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/checklist@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/code@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/table@latest"></script>
@@ -73,7 +74,7 @@ $metaText = implode(' ', $metaParts);
     
     <link rel="stylesheet" href="assets/style.css">
 </head>
-<body class="bg-slate-900 text-slate-300 flex h-screen overflow-hidden selection:bg-blue-500/30 p-6 gap-2">
+<body class="public-page bg-slate-900 text-slate-300 flex h-screen overflow-hidden selection:bg-blue-500/30 p-6 gap-2">
     <aside id="sidebar" class="w-80 bg-slate-800/80 border border-slate-700 shadow-2xl shrink-0 h-full overflow-y-auto flex flex-col rounded-3xl">
         
         <div class="h-16 px-6 flex items-center shrink-0 border-b border-slate-700/50 bg-slate-900/60 gap-3">
@@ -130,12 +131,76 @@ $metaText = implode(' ', $metaParts);
     </main>
     <script>
         const content = <?php echo $page['content'] ?: '{"blocks":[]}'; ?>;
+        const HeaderToolClass = window.Header || window.EditorjsHeader;
+        const ParagraphToolClass = window.Paragraph;
+        const applyPublicTableCellColors = () => {
+            if (!content || !Array.isArray(content.blocks)) return;
+            const tableBlocks = content.blocks.filter(b => b.type === 'table');
+            const domTables = Array.from(document.querySelectorAll('#editorjs .tc-table, #editorjs table'));
+            const getRows = (tableEl) => {
+                const tcRows = Array.from(tableEl.querySelectorAll('.tc-row'));
+                if (tcRows.length > 0) {
+                    return tcRows.map((row) => Array.from(row.querySelectorAll('.tc-cell')));
+                }
+                const trRows = Array.from(tableEl.querySelectorAll('tr'));
+                return trRows.map((row) => Array.from(row.querySelectorAll('td, th')));
+            };
+            const applySizes = (rows, block) => {
+                const colWidths = (block.data && block.data.columnWidths) ? block.data.columnWidths : {};
+                const rowHeights = (block.data && block.data.rowHeights) ? block.data.rowHeights : {};
+                Object.keys(colWidths).forEach((colKey) => {
+                    const cIdx = Number(colKey);
+                    const width = Number(colWidths[colKey]);
+                    if (!Number.isFinite(cIdx) || !Number.isFinite(width)) return;
+                    rows.forEach((cells) => {
+                        const cell = cells[cIdx];
+                        if (!cell) return;
+                        cell.style.width = `${width}px`;
+                        cell.style.minWidth = `${width}px`;
+                        cell.style.maxWidth = '';
+                    });
+                });
+                Object.keys(rowHeights).forEach((rowKey) => {
+                    const rIdx = Number(rowKey);
+                    const height = Number(rowHeights[rowKey]);
+                    if (!Number.isFinite(rIdx) || !Number.isFinite(height)) return;
+                    const targetRow = rows[rIdx] || [];
+                    targetRow.forEach((cell) => {
+                        cell.style.height = `${height}px`;
+                        cell.style.minHeight = `${height}px`;
+                    });
+                });
+            };
+            tableBlocks.forEach((block, tableIdx) => {
+                const colorMap = (block.data && block.data.cellColors) ? block.data.cellColors : {};
+                const tableEl = domTables[tableIdx];
+                if (!tableEl) return;
+                const rows = getRows(tableEl);
+                applySizes(rows, block);
+                rows.forEach((cells, rIdx) => {
+                    cells.forEach((cell, cIdx) => {
+                        const key = `${rIdx}-${cIdx}`;
+                        if (colorMap[key]) {
+                            cell.style.backgroundColor = colorMap[key];
+                        }
+                    });
+                });
+            });
+        };
         new EditorJS({ 
             holder: 'editorjs', 
             data: content, 
             readOnly: true, 
             tools: { 
-                header: Header, 
+                paragraph: { class: ParagraphToolClass, inlineToolbar: true },
+                header: {
+                    class: HeaderToolClass,
+                    inlineToolbar: true,
+                    config: {
+                        levels: [1, 2, 3, 4],
+                        defaultLevel: 2
+                    }
+                }, 
                 list: {class: EditorjsList}, 
                 checklist: Checklist, 
                 table: Table,
@@ -147,7 +212,10 @@ $metaText = implode(' ', $metaParts);
                 image: SimpleImage,
                 embed: Embed,
                 Color: window.ColorPlugin 
-            } 
+            },
+            onReady: () => {
+                applyPublicTableCellColors();
+            }
         });
     </script>
 </body>

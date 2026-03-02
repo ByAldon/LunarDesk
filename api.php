@@ -185,6 +185,20 @@ try {
             } else {
                 echo json_encode(['success' => false]);
             }
+        } elseif ($method === 'DELETE') {
+            if (($_SESSION['role'] ?? '') !== 'admin') {
+                http_response_code(403);
+                echo json_encode(['error' => 'Forbidden']);
+                exit;
+            }
+            $messageId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+            if ($messageId <= 0) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Missing message id']);
+                exit;
+            }
+            $db->prepare("DELETE FROM admin_terminal WHERE id = ?")->execute([$messageId]);
+            echo json_encode(['success' => true]);
         } else {
             echo json_encode($db->query("SELECT * FROM admin_terminal ORDER BY created_at ASC LIMIT 100")->fetchAll(PDO::FETCH_ASSOC));
         }
@@ -223,7 +237,21 @@ try {
             $stmt->execute([$roomId]);
             echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
         } elseif ($method === 'DELETE') {
-            $db->prepare("DELETE FROM webhook_messages WHERE room_id = ?")->execute([$roomId]);
+            if (($_SESSION['role'] ?? '') !== 'admin') {
+                http_response_code(403);
+                echo json_encode(['error' => 'Forbidden']);
+                exit;
+            }
+            $messageId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+            if ($messageId > 0) {
+                if ((int)$roomId > 0) {
+                    $db->prepare("DELETE FROM webhook_messages WHERE id = ? AND room_id = ?")->execute([$messageId, $roomId]);
+                } else {
+                    $db->prepare("DELETE FROM webhook_messages WHERE id = ?")->execute([$messageId]);
+                }
+            } else {
+                $db->prepare("DELETE FROM webhook_messages WHERE room_id = ?")->execute([$roomId]);
+            }
             echo json_encode(['success' => true]);
         }
         exit;

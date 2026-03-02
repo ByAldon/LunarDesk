@@ -5,6 +5,46 @@ function focusEditor() {
     if (globalEditorInstance) globalEditorInstance.focus();
 }
 
+class UnderlineTool {
+    static get isInline() { return true; }
+    static get sanitize() { return { u: {} }; }
+
+    constructor({ api }) {
+        this.api = api;
+        this.button = null;
+        this.tag = 'U';
+    }
+
+    render() {
+        this.button = document.createElement('button');
+        this.button.type = 'button';
+        this.button.classList.add(this.api.styles.inlineToolButton);
+        this.button.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v8a6 6 0 0 0 12 0V3h-2v8a4 4 0 0 1-8 0V3H6zm-1 16v2h14v-2H5z" fill="currentColor"/></svg>';
+        return this.button;
+    }
+
+    surround() {
+        document.execCommand('underline');
+    }
+
+    checkState() {
+        if (!this.button) return;
+        this.button.classList.toggle(this.api.styles.inlineToolButtonActive, document.queryCommandState('underline'));
+    }
+}
+
+class FilteredListTool extends EditorjsList {
+    static get toolbox() {
+        const base = EditorjsList.toolbox;
+        if (!Array.isArray(base)) return base;
+        return base.filter((entry) => {
+            const title = String(entry && entry.title ? entry.title : '').toLowerCase();
+            const style = entry && entry.data && entry.data.style ? String(entry.data.style).toLowerCase() : '';
+            return title !== 'checklist' && style !== 'checklist';
+        });
+    }
+}
+
 const { createApp } = Vue;
 createApp({
     data() {
@@ -25,7 +65,7 @@ createApp({
             activeRoom: null,
             roomMessages: [],
             adminMessages: [], 
-            activeLeftTab: 'stream',
+            activeLeftTab: 'terminal',
             hasUnreadStream: false,
             hasUnreadTerminal: false,
             newAdminMsg: '',
@@ -179,20 +219,38 @@ createApp({
 
             setTimeout(() => {
                 const initialData = this.lastSavedContent ? JSON.parse(this.lastSavedContent) : { blocks: [] };
+                const HeaderToolClass = window.Header || window.EditorjsHeader;
+                const ParagraphToolClass = window.Paragraph;
                 globalEditorInstance = new EditorJS({
                     holder: 'editorjs',
                     data: initialData,
                     placeholder: 'Begin your transmission...',
+                    inlineToolbar: ['bold', 'italic', 'link', 'underline', 'inlineCode'],
                     tools: {
-                        header: Header,
-                        list: { class: EditorjsList, inlineToolbar: true },
-                        checklist: { class: Checklist, inlineToolbar: true },
+                        paragraph: { class: ParagraphToolClass, inlineToolbar: ['bold', 'italic', 'link', 'underline', 'inlineCode'] },
+                        header: {
+                            class: HeaderToolClass,
+                            inlineToolbar: ['bold', 'italic', 'link', 'underline', 'inlineCode'],
+                            config: {
+                                levels: [1, 2, 3, 4],
+                                defaultLevel: 2
+                            }
+                        },
+                        list: { class: FilteredListTool, inlineToolbar: ['bold', 'italic', 'link', 'underline', 'inlineCode'] },
+                        checklist: {
+                            class: Checklist,
+                            inlineToolbar: ['bold', 'italic', 'link', 'underline', 'inlineCode'],
+                            toolbox: {
+                                title: 'Checkboxes'
+                            }
+                        },
                         code: CodeTool,
-                        table: { class: Table, inlineToolbar: true },
-                        quote: { class: Quote, inlineToolbar: true },
+                        table: { class: Table, inlineToolbar: ['bold', 'italic', 'link', 'underline', 'inlineCode'] },
+                        quote: { class: Quote, inlineToolbar: ['bold', 'italic', 'link', 'underline', 'inlineCode'] },
                         warning: Warning,
                         delimiter: Delimiter,
                         inlineCode: InlineCode,
+                        underline: UnderlineTool,
                         simpleImage: SimpleImage,
                         image: {
                             class: ImageTool,
@@ -209,7 +267,15 @@ createApp({
                             }
                         }
                     },
-                    onChange: () => { this.needsSave = true; this.autoSave(); }
+                    onReady: () => {
+                        this.bindTableCellColorPicker();
+                        this.applyTableCellColorsFromData(initialData);
+                        this.applyTableCellSizesFromData(initialData);
+                    },
+                    onChange: () => {
+                        this.needsSave = true;
+                        this.autoSave();
+                    }
                 });
             }, 100);
             this.loading = false;
@@ -218,7 +284,9 @@ createApp({
             if (this.activePage && globalEditorInstance) {
                 try {
                     const raw = await globalEditorInstance.save();
-                    const out = this.extractCellColors(raw);
+                    const withTableColors = this.captureTableCellColors(raw);
+                    const withTableSizes = this.captureTableCellSizes(withTableColors);
+                    const out = this.extractCellColors(withTableSizes);
                     const str = JSON.stringify(out);
                     if (str !== this.lastSavedContent || this.activePage.title !== this.lastSavedTitle || this.activePage.is_public !== this.lastSavedPublic || this.activePage.cover_image !== this.lastSavedCover) {
                         await fetch('api.php', {
@@ -248,7 +316,9 @@ createApp({
             if (globalEditorInstance) {
                 try {
                     const raw = await globalEditorInstance.save(); 
-                    const out = this.extractCellColors(raw); 
+                    const withTableColors = this.captureTableCellColors(raw);
+                    const withTableSizes = this.captureTableCellSizes(withTableColors);
+                    const out = this.extractCellColors(withTableSizes); 
                     const str = JSON.stringify(out);
                     const publishCover = this.activePage.draft_cover_image || this.activePage.cover_image || '';
                     await fetch('api.php', {
@@ -430,9 +500,26 @@ createApp({
             return window.location.origin + window.location.pathname.replace('index.php', '') + 'webhook.php?key=' + key;
         },
         async confirmClearMessages() {
+            if (!this.currentUser || this.currentUser.role !== 'admin') return;
             this.showConfirm("Signal Clear", "Wipe all messages in this stream?", async () => {
                 await fetch(`api.php?action=messages&room_id=${this.activeRoom.id}`, { method: 'DELETE' });
                 this.roomMessages = [];
+            });
+        },
+        async confirmDeleteMessage(msg) {
+            if (!this.currentUser || this.currentUser.role !== 'admin') return;
+            if (!this.activeRoom || !msg || !msg.id) return;
+            this.showConfirm("Delete Message", "Delete this message?", async () => {
+                await fetch(`api.php?action=messages&room_id=${this.activeRoom.id}&id=${msg.id}`, { method: 'DELETE' });
+                this.roomMessages = this.roomMessages.filter((m) => Number(m.id) !== Number(msg.id));
+            });
+        },
+        async confirmDeleteAdminMessage(chat) {
+            if (!this.currentUser || this.currentUser.role !== 'admin') return;
+            if (!chat || !chat.id) return;
+            this.showConfirm("Delete Message", "Delete this terminal message?", async () => {
+                await fetch(`api.php?action=admin_terminal&id=${chat.id}`, { method: 'DELETE' });
+                this.adminMessages = this.adminMessages.filter((m) => Number(m.id) !== Number(chat.id));
             });
         },
         async sendAdminMessage() {
@@ -641,6 +728,538 @@ createApp({
                 });
             }
             return data;
+        },
+        bindTableCellColorPicker() {
+            const holder = document.getElementById('editorjs');
+            if (!holder) return;
+
+            if (!this._tableColorInput) {
+                const input = document.createElement('input');
+                input.type = 'color';
+                input.style.position = 'fixed';
+                input.style.left = '-9999px';
+                input.style.top = '0';
+                input.addEventListener('input', () => {
+                    if (!this._activeTableCell) return;
+                    this._activeTableCell.style.backgroundColor = input.value;
+                });
+                input.addEventListener('change', () => {
+                    this.needsSave = true;
+                    this.autoSave();
+                });
+                document.body.appendChild(input);
+                this._tableColorInput = input;
+            }
+
+            if (!this._tableCellColorMenu) {
+                const menu = document.createElement('div');
+                menu.style.position = 'fixed';
+                menu.style.display = 'none';
+                menu.style.zIndex = '9999';
+                menu.style.padding = '8px';
+                menu.style.background = '#0f172a';
+                menu.style.border = '1px solid #334155';
+                menu.style.borderRadius = '10px';
+                menu.style.boxShadow = '0 10px 30px rgba(0,0,0,0.45)';
+                menu.style.minWidth = '170px';
+
+                const title = document.createElement('div');
+                title.textContent = 'Cell background';
+                title.style.fontSize = '10px';
+                title.style.fontWeight = '700';
+                title.style.letterSpacing = '0.08em';
+                title.style.textTransform = 'uppercase';
+                title.style.color = '#94a3b8';
+                title.style.marginBottom = '8px';
+                menu.appendChild(title);
+
+                const swatchWrap = document.createElement('div');
+                swatchWrap.style.display = 'grid';
+                swatchWrap.style.gridTemplateColumns = 'repeat(6, 1fr)';
+                swatchWrap.style.gap = '6px';
+                swatchWrap.style.marginBottom = '8px';
+                const colors = ['#0f172a', '#1e293b', '#334155', '#475569', '#0369a1', '#166534', '#7c2d12', '#9f1239', '#1d4ed8', '#6d28d9', '#b45309', '#be123c'];
+                colors.forEach((hex) => {
+                    const swatch = document.createElement('button');
+                    swatch.type = 'button';
+                    swatch.style.width = '22px';
+                    swatch.style.height = '22px';
+                    swatch.style.borderRadius = '6px';
+                    swatch.style.border = '1px solid #475569';
+                    swatch.style.background = hex;
+                    swatch.style.cursor = 'pointer';
+                    swatch.title = hex;
+                    swatch.addEventListener('click', () => {
+                        if (!this._activeTableCell) return;
+                        this._activeTableCell.style.backgroundColor = hex;
+                        this.needsSave = true;
+                        this.autoSave();
+                    });
+                    swatchWrap.appendChild(swatch);
+                });
+                menu.appendChild(swatchWrap);
+
+                const formatTitle = document.createElement('div');
+                formatTitle.textContent = 'Cell elements';
+                formatTitle.style.fontSize = '10px';
+                formatTitle.style.fontWeight = '700';
+                formatTitle.style.letterSpacing = '0.08em';
+                formatTitle.style.textTransform = 'uppercase';
+                formatTitle.style.color = '#94a3b8';
+                formatTitle.style.marginBottom = '6px';
+                menu.appendChild(formatTitle);
+
+                const formatButtons = document.createElement('div');
+                formatButtons.style.display = 'grid';
+                formatButtons.style.gridTemplateColumns = 'repeat(4, 1fr)';
+                formatButtons.style.gap = '6px';
+                formatButtons.style.marginBottom = '8px';
+
+                const makeFormatBtn = (label, onClick) => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.textContent = label;
+                    btn.style.height = '24px';
+                    btn.style.borderRadius = '6px';
+                    btn.style.background = '#1e293b';
+                    btn.style.border = '1px solid #334155';
+                    btn.style.color = '#e2e8f0';
+                    btn.style.fontSize = '11px';
+                    btn.style.fontWeight = '700';
+                    btn.style.cursor = 'pointer';
+                    btn.addEventListener('click', onClick);
+                    return btn;
+                };
+
+                formatButtons.appendChild(makeFormatBtn('B', () => this.applyCellCommand('bold')));
+                formatButtons.appendChild(makeFormatBtn('I', () => this.applyCellCommand('italic')));
+                formatButtons.appendChild(makeFormatBtn('U', () => this.applyCellCommand('underline')));
+                formatButtons.appendChild(makeFormatBtn('Link', () => {
+                    const url = window.prompt('Link URL', 'https://');
+                    if (!url) return;
+                    this.applyCellCommand('createLink', url);
+                }));
+                menu.appendChild(formatButtons);
+
+                const insertButtons = document.createElement('div');
+                insertButtons.style.display = 'grid';
+                insertButtons.style.gridTemplateColumns = '1fr 1fr';
+                insertButtons.style.gap = '6px';
+                insertButtons.style.marginBottom = '8px';
+                insertButtons.appendChild(makeFormatBtn('Checkbox', () => this.insertIntoActiveCell('☐ ')));
+                insertButtons.appendChild(makeFormatBtn('Bullet', () => this.insertIntoActiveCell('• ')));
+                menu.appendChild(insertButtons);
+
+                const sizeTitle = document.createElement('div');
+                sizeTitle.textContent = 'Cell size';
+                sizeTitle.style.fontSize = '10px';
+                sizeTitle.style.fontWeight = '700';
+                sizeTitle.style.letterSpacing = '0.08em';
+                sizeTitle.style.textTransform = 'uppercase';
+                sizeTitle.style.color = '#94a3b8';
+                sizeTitle.style.marginBottom = '6px';
+                menu.appendChild(sizeTitle);
+
+                const sizeControls = document.createElement('div');
+                sizeControls.style.display = 'grid';
+                sizeControls.style.gridTemplateColumns = '1fr 1fr';
+                sizeControls.style.gap = '6px';
+                sizeControls.style.marginBottom = '8px';
+
+                const makeSizeGroup = (labelText, minusFn, plusFn) => {
+                    const wrap = document.createElement('div');
+                    wrap.style.display = 'grid';
+                    wrap.style.gridTemplateColumns = '24px 1fr 24px';
+                    wrap.style.alignItems = 'center';
+                    wrap.style.gap = '4px';
+
+                    const minus = document.createElement('button');
+                    minus.type = 'button';
+                    minus.textContent = '-';
+                    minus.style.height = '22px';
+                    minus.style.borderRadius = '6px';
+                    minus.style.background = '#1e293b';
+                    minus.style.border = '1px solid #334155';
+                    minus.style.color = '#e2e8f0';
+                    minus.style.cursor = 'pointer';
+                    minus.addEventListener('click', minusFn);
+
+                    const label = document.createElement('div');
+                    label.textContent = labelText;
+                    label.style.textAlign = 'center';
+                    label.style.fontSize = '10px';
+                    label.style.color = '#cbd5e1';
+                    label.style.fontWeight = '700';
+
+                    const plus = document.createElement('button');
+                    plus.type = 'button';
+                    plus.textContent = '+';
+                    plus.style.height = '22px';
+                    plus.style.borderRadius = '6px';
+                    plus.style.background = '#1e293b';
+                    plus.style.border = '1px solid #334155';
+                    plus.style.color = '#e2e8f0';
+                    plus.style.cursor = 'pointer';
+                    plus.addEventListener('click', plusFn);
+
+                    wrap.appendChild(minus);
+                    wrap.appendChild(label);
+                    wrap.appendChild(plus);
+                    return { wrap, label };
+                };
+
+                const widthGroup = makeSizeGroup('W', () => this.adjustActiveCellSize('width', -20), () => this.adjustActiveCellSize('width', 20));
+                const heightGroup = makeSizeGroup('H', () => this.adjustActiveCellSize('height', -12), () => this.adjustActiveCellSize('height', 12));
+                sizeControls.appendChild(widthGroup.wrap);
+                sizeControls.appendChild(heightGroup.wrap);
+                menu.appendChild(sizeControls);
+                this._tableCellWidthLabel = widthGroup.label;
+                this._tableCellHeightLabel = heightGroup.label;
+
+                const actions = document.createElement('div');
+                actions.style.display = 'flex';
+                actions.style.gap = '6px';
+
+                const customBtn = document.createElement('button');
+                customBtn.type = 'button';
+                customBtn.textContent = 'Custom';
+                customBtn.style.flex = '1';
+                customBtn.style.padding = '6px 8px';
+                customBtn.style.fontSize = '10px';
+                customBtn.style.fontWeight = '700';
+                customBtn.style.textTransform = 'uppercase';
+                customBtn.style.letterSpacing = '0.06em';
+                customBtn.style.color = '#e2e8f0';
+                customBtn.style.background = '#1e293b';
+                customBtn.style.border = '1px solid #334155';
+                customBtn.style.borderRadius = '7px';
+                customBtn.style.cursor = 'pointer';
+                customBtn.addEventListener('click', () => {
+                    if (!this._activeTableCell || !this._tableColorInput) return;
+                    this._tableColorInput.value = this.toHexColor(this._activeTableCell.style.backgroundColor || '#1e293b');
+                    this._tableColorInput.click();
+                });
+                actions.appendChild(customBtn);
+
+                const resetBtn = document.createElement('button');
+                resetBtn.type = 'button';
+                resetBtn.textContent = 'Reset';
+                resetBtn.style.flex = '1';
+                resetBtn.style.padding = '6px 8px';
+                resetBtn.style.fontSize = '10px';
+                resetBtn.style.fontWeight = '700';
+                resetBtn.style.textTransform = 'uppercase';
+                resetBtn.style.letterSpacing = '0.06em';
+                resetBtn.style.color = '#fecaca';
+                resetBtn.style.background = '#3f1d1d';
+                resetBtn.style.border = '1px solid #7f1d1d';
+                resetBtn.style.borderRadius = '7px';
+                resetBtn.style.cursor = 'pointer';
+                resetBtn.addEventListener('click', () => {
+                    if (!this._activeTableCell) return;
+                    this._activeTableCell.style.backgroundColor = '';
+                    this.needsSave = true;
+                    this.autoSave();
+                });
+                actions.appendChild(resetBtn);
+
+                menu.appendChild(actions);
+                document.body.appendChild(menu);
+                this._tableCellColorMenu = menu;
+            }
+
+            if (!this._tableColorOutsideHandler) {
+                this._tableColorOutsideHandler = (event) => {
+                    if (!this._tableCellColorMenu || this._tableCellColorMenu.style.display === 'none') return;
+                    if (this._tableCellColorMenu.contains(event.target)) return;
+                    const cell = event.target.closest ? event.target.closest('.tc-cell, td, th') : null;
+                    if (cell && cell === this._activeTableCell) return;
+                    this.hideTableCellColorMenu();
+                };
+                document.addEventListener('mousedown', this._tableColorOutsideHandler);
+            }
+
+            if (!this._tableColorRepositionHandler) {
+                this._tableColorRepositionHandler = () => {
+                    if (!this._activeTableCell) return;
+                    if (!this._tableCellColorMenu || this._tableCellColorMenu.style.display === 'none') return;
+                    this.positionTableCellColorMenu(this._activeTableCell);
+                };
+                window.addEventListener('resize', this._tableColorRepositionHandler);
+                window.addEventListener('scroll', this._tableColorRepositionHandler, true);
+            }
+
+            if (this._tableCellClickHandler) {
+                holder.removeEventListener('click', this._tableCellClickHandler);
+            }
+
+            this._tableCellClickHandler = (event) => {
+                const cell = event.target.closest('.tc-cell, td, th');
+                if (!cell || !holder.contains(cell)) return;
+                this._activeTableCell = cell;
+                this.positionTableCellColorMenu(cell);
+                this.refreshActiveCellSizeLabels();
+            };
+
+            holder.addEventListener('click', this._tableCellClickHandler);
+        },
+        positionTableCellColorMenu(cell) {
+            if (!this._tableCellColorMenu || !cell) return;
+            const rect = cell.getBoundingClientRect();
+            const menuW = 190;
+            const menuH = 140;
+            const maxX = Math.max(8, window.innerWidth - menuW - 8);
+            const maxY = Math.max(8, window.innerHeight - menuH - 8);
+            const left = Math.max(8, Math.min(rect.left, maxX));
+            const top = Math.max(8, Math.min(rect.bottom + 6, maxY));
+            this._tableCellColorMenu.style.left = `${left}px`;
+            this._tableCellColorMenu.style.top = `${top}px`;
+            this._tableCellColorMenu.style.display = 'block';
+        },
+        hideTableCellColorMenu() {
+            if (!this._tableCellColorMenu) return;
+            this._tableCellColorMenu.style.display = 'none';
+        },
+        applyCellCommand(command, value = null) {
+            if (!this._activeTableCell) return;
+            this._activeTableCell.focus();
+            this.ensureCaretInActiveCell();
+            document.execCommand(command, false, value);
+            this.needsSave = true;
+            this.autoSave();
+        },
+        insertIntoActiveCell(text) {
+            if (!this._activeTableCell) return;
+            this._activeTableCell.focus();
+            this.ensureCaretInActiveCell();
+            document.execCommand('insertText', false, text);
+            this.needsSave = true;
+            this.autoSave();
+        },
+        ensureCaretInActiveCell() {
+            if (!this._activeTableCell) return;
+            const selection = window.getSelection();
+            const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+            const inside = range && this._activeTableCell.contains(range.startContainer);
+            if (inside) return;
+            const newRange = document.createRange();
+            newRange.selectNodeContents(this._activeTableCell);
+            newRange.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+        },
+        adjustActiveCellSize(type, delta) {
+            if (!this._activeTableCell) return;
+            const tableEl = this._activeTableCell.closest('.tc-table, table');
+            if (!tableEl) return;
+            const rows = this.getTableRows(tableEl);
+            const pos = this.getCellPosition(rows, this._activeTableCell);
+            if (!pos) return;
+
+            if (type === 'width') {
+                const current = this.getCellPixelSize(rows[0] && rows[0][pos.cIdx], 'width', 140);
+                const next = Math.max(60, Math.min(900, current + delta));
+                rows.forEach((cells) => {
+                    const cell = cells[pos.cIdx];
+                    if (!cell) return;
+                    cell.style.width = `${next}px`;
+                    cell.style.minWidth = `${next}px`;
+                    cell.style.maxWidth = `${next}px`;
+                });
+            } else {
+                const current = this.getCellPixelSize(rows[pos.rIdx] && rows[pos.rIdx][0], 'height', 44);
+                const next = Math.max(28, Math.min(360, current + delta));
+                const targetRow = rows[pos.rIdx] || [];
+                targetRow.forEach((cell) => {
+                    cell.style.height = `${next}px`;
+                    cell.style.minHeight = `${next}px`;
+                });
+            }
+
+            this.refreshActiveCellSizeLabels();
+            this.needsSave = true;
+            this.autoSave();
+        },
+        refreshActiveCellSizeLabels() {
+            if (!this._activeTableCell) return;
+            const tableEl = this._activeTableCell.closest('.tc-table, table');
+            if (!tableEl) return;
+            const rows = this.getTableRows(tableEl);
+            const pos = this.getCellPosition(rows, this._activeTableCell);
+            if (!pos) return;
+
+            if (this._tableCellWidthLabel) {
+                const width = this.getCellPixelSize(rows[0] && rows[0][pos.cIdx], 'width', 140);
+                this._tableCellWidthLabel.textContent = `W ${Math.round(width)}`;
+            }
+            if (this._tableCellHeightLabel) {
+                const height = this.getCellPixelSize(rows[pos.rIdx] && rows[pos.rIdx][0], 'height', 44);
+                this._tableCellHeightLabel.textContent = `H ${Math.round(height)}`;
+            }
+        },
+        applyTableCellColorsFromData(data) {
+            if (!data || !Array.isArray(data.blocks)) return;
+            const tableBlocks = data.blocks.filter(b => b.type === 'table');
+            const domTables = Array.from(document.querySelectorAll('#editorjs .tc-table, #editorjs table'));
+
+            tableBlocks.forEach((block, tableIdx) => {
+                const colorMap = (block.data && block.data.cellColors) ? block.data.cellColors : {};
+                const tableEl = domTables[tableIdx];
+                if (!tableEl) return;
+                const rows = this.getTableRows(tableEl);
+                rows.forEach((cells, rIdx) => {
+                    cells.forEach((cell, cIdx) => {
+                        const key = `${rIdx}-${cIdx}`;
+                        cell.style.backgroundColor = colorMap[key] || '';
+                    });
+                });
+            });
+        },
+        captureTableCellColors(data) {
+            if (!data || !Array.isArray(data.blocks)) return data;
+            const tableBlocks = data.blocks.filter(b => b.type === 'table');
+            const domTables = Array.from(document.querySelectorAll('#editorjs .tc-table, #editorjs table'));
+
+            tableBlocks.forEach((block, tableIdx) => {
+                const tableEl = domTables[tableIdx];
+                if (!tableEl) return;
+
+                const colors = {};
+                const rows = this.getTableRows(tableEl);
+                rows.forEach((cells, rIdx) => {
+                    cells.forEach((cell, cIdx) => {
+                        const color = (cell.style.backgroundColor || '').trim();
+                        if (color && color !== 'transparent') {
+                            colors[`${rIdx}-${cIdx}`] = color;
+                        }
+                    });
+                });
+
+                if (!block.data) block.data = {};
+                if (Object.keys(colors).length > 0) {
+                    block.data.cellColors = colors;
+                } else {
+                    delete block.data.cellColors;
+                }
+            });
+
+            return data;
+        },
+        applyTableCellSizesFromData(data) {
+            if (!data || !Array.isArray(data.blocks)) return;
+            const tableBlocks = data.blocks.filter(b => b.type === 'table');
+            const domTables = Array.from(document.querySelectorAll('#editorjs .tc-table, #editorjs table'));
+
+            tableBlocks.forEach((block, tableIdx) => {
+                const tableEl = domTables[tableIdx];
+                if (!tableEl) return;
+                const rows = this.getTableRows(tableEl);
+                const colWidths = (block.data && block.data.columnWidths) ? block.data.columnWidths : {};
+                const rowHeights = (block.data && block.data.rowHeights) ? block.data.rowHeights : {};
+
+                Object.keys(colWidths).forEach((colKey) => {
+                    const cIdx = Number(colKey);
+                    const width = Number(colWidths[colKey]);
+                    if (!Number.isFinite(cIdx) || !Number.isFinite(width)) return;
+                    rows.forEach((cells) => {
+                        const cell = cells[cIdx];
+                        if (!cell) return;
+                        cell.style.width = `${width}px`;
+                        cell.style.minWidth = `${width}px`;
+                        cell.style.maxWidth = `${width}px`;
+                    });
+                });
+
+                Object.keys(rowHeights).forEach((rowKey) => {
+                    const rIdx = Number(rowKey);
+                    const height = Number(rowHeights[rowKey]);
+                    if (!Number.isFinite(rIdx) || !Number.isFinite(height)) return;
+                    const targetRow = rows[rIdx] || [];
+                    targetRow.forEach((cell) => {
+                        cell.style.height = `${height}px`;
+                        cell.style.minHeight = `${height}px`;
+                    });
+                });
+            });
+        },
+        captureTableCellSizes(data) {
+            if (!data || !Array.isArray(data.blocks)) return data;
+            const tableBlocks = data.blocks.filter(b => b.type === 'table');
+            const domTables = Array.from(document.querySelectorAll('#editorjs .tc-table, #editorjs table'));
+
+            tableBlocks.forEach((block, tableIdx) => {
+                const tableEl = domTables[tableIdx];
+                if (!tableEl) return;
+                const rows = this.getTableRows(tableEl);
+                const columnWidths = {};
+                const rowHeights = {};
+
+                const firstRow = rows[0] || [];
+                firstRow.forEach((cell, cIdx) => {
+                    const width = this.getCellPixelSize(cell, 'width', 0);
+                    const styled = parseFloat(cell && cell.style && cell.style.width ? cell.style.width : '');
+                    if (styled > 0 || width > 0) {
+                        columnWidths[cIdx] = Math.round(styled > 0 ? styled : width);
+                    }
+                });
+
+                rows.forEach((cells, rIdx) => {
+                    const firstCell = cells[0];
+                    if (!firstCell) return;
+                    const height = this.getCellPixelSize(firstCell, 'height', 0);
+                    const styled = parseFloat(firstCell.style && firstCell.style.height ? firstCell.style.height : '');
+                    if (styled > 0 || height > 0) {
+                        rowHeights[rIdx] = Math.round(styled > 0 ? styled : height);
+                    }
+                });
+
+                if (!block.data) block.data = {};
+                if (Object.keys(columnWidths).length > 0) block.data.columnWidths = columnWidths;
+                else delete block.data.columnWidths;
+                if (Object.keys(rowHeights).length > 0) block.data.rowHeights = rowHeights;
+                else delete block.data.rowHeights;
+            });
+
+            return data;
+        },
+        getTableRows(tableEl) {
+            if (!tableEl) return [];
+            const tcRows = Array.from(tableEl.querySelectorAll('.tc-row'));
+            if (tcRows.length > 0) {
+                return tcRows.map((row) => Array.from(row.querySelectorAll('.tc-cell')));
+            }
+            const trRows = Array.from(tableEl.querySelectorAll('tr'));
+            return trRows.map((row) => Array.from(row.querySelectorAll('td, th')));
+        },
+        getCellPosition(rows, targetCell) {
+            for (let rIdx = 0; rIdx < rows.length; rIdx++) {
+                const cIdx = rows[rIdx].indexOf(targetCell);
+                if (cIdx !== -1) return { rIdx, cIdx };
+            }
+            return null;
+        },
+        getCellPixelSize(cell, axis, fallback) {
+            if (!cell) return fallback;
+            const styled = parseFloat(axis === 'width' ? cell.style.width : cell.style.height);
+            if (Number.isFinite(styled) && styled > 0) return styled;
+            const rect = cell.getBoundingClientRect();
+            const measured = axis === 'width' ? rect.width : rect.height;
+            return Number.isFinite(measured) && measured > 0 ? measured : fallback;
+        },
+        toHexColor(color) {
+            if (!color) return '#1e293b';
+            if (color.startsWith('#')) {
+                if (color.length === 4) {
+                    return `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`;
+                }
+                return color;
+            }
+            const m = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+            if (!m) return '#1e293b';
+            const r = Number(m[1]).toString(16).padStart(2, '0');
+            const g = Number(m[2]).toString(16).padStart(2, '0');
+            const b = Number(m[3]).toString(16).padStart(2, '0');
+            return `#${r}${g}${b}`;
         },
         showAlert(title, message) {
             this.alertDialog = { show: true, title, message };
