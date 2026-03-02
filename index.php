@@ -190,6 +190,7 @@ include 'version.php';
                                 </label>
                                 <span v-if="lastSaveTime" class="text-blue-400 font-mono text-[10px] tracking-widest uppercase">Signal: {{ lastSaveTime }}</span>
                                 <span v-if="activePage.has_draft == 1" class="text-amber-500 font-black animate-pulse uppercase text-[10px] tracking-widest bg-amber-500/10 px-3 py-1 rounded-md">Unpublished</span>
+                                <span class="text-slate-400 font-mono text-[10px] tracking-widest uppercase">{{ getItemMetaLabel(activePage) }}</span>
                             </div>
                             
                             <div class="flex items-center gap-3">
@@ -209,7 +210,6 @@ include 'version.php';
                         </div>
 
                         <div class="p-12 px-20 max-w-5xl mx-auto w-full pb-32" @click.self="focusEditor">
-                            <p class="text-[10px] uppercase tracking-[0.18em] text-slate-500 mb-6">{{ getItemMetaLabel(activePage) }}</p>
                             <input v-model="activePage.title" placeholder="Untitled Page" class="text-5xl font-black bg-transparent text-white outline-none w-full mb-10 placeholder-slate-600 transition-all border-none focus:ring-0">
                             <div id="editorjs" class="w-full"></div>
                         </div>
