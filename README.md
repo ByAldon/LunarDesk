@@ -1,87 +1,157 @@
 # LunarDesk
 
-A lightweight, self-hosted workspace and documentation tool built with PHP, SQLite, and Vue.js. Designed for shared hosting environments with a focus on privacy, rapid documentation, and a hidden access portal.
+LunarDesk is a lightweight, self-hosted workspace for writing docs, publishing selected pages, and receiving webhook messages in a built-in stream.
 
-## 💡 About This Project
+Current app version: `v2.3.9`
 
-This project was originally built as a private, internal tool for my own personal use, specifically tailored to the workflow of my daily job. I have decided to share this project open-source so others might benefit from it.
+## What It Does
 
-**Please note:** I am not planning to take requests to build private projects or develop custom features for others. The tool is provided as-is. If you wish to use LunarDesk for yourself, you are more than welcome to fork the repository, modify the code, and customize the system entirely to your own taste and requirements!
+- Organize content in a hierarchy: `spaces -> pages -> subpages`.
+- Edit content with Editor.js blocks.
+- Auto-save as draft while you work.
+- Publish manually when ready.
+- Set per-page public visibility and share via slug URL.
+- Add and crop page banners before saving.
+- Manage users and roles (`admin`, `user`).
+- Receive external messages in channel streams via webhook URLs.
+- Use an admin terminal with built-in commands.
 
-## 🚀 Key Features
+## Core Features
 
-### 📂 Hierarchical Documentation
-Organize your thoughts and documentation cleanly.
-- **Spaces:** Act as root folders or categories for your projects.
-- **Pages & Subpages:** Create deep, structured documentation within your Spaces.
+### Documentation Workspace
 
-### 📝 Rich Block Editor
-Powered by Editor.js, providing a seamless block-based writing experience.
-- **Tools Included:** Headers, Lists, Checklists, Code blocks, Quotes, Warnings, Delimiters, and Embeds.
-- **Advanced Tables:** Custom tables with individual cell-color highlighting.
-- **Inline Formatting:** Bold, Italic, Links, Inline Code, Text Color, and Text Markers.
+- Create, rename, and delete spaces/pages/subpages.
+- Reorder pages and subpages with up/down controls.
+- Show item metadata (`Created` or `Updated`, actor, timestamp).
 
-### 🖼️ Banner Management
-Personalize your pages with custom cover images.
-- Upload any image as a page banner.
-- **Built-in Cropper:** Includes a Cropper.js integration to zoom, move, and crop your image to a perfect 21:9 ultra-wide aspect ratio before uploading.
+### Editor
 
-### 🔒 Privacy & Security
-Built with shared hosting in mind.
-- **Hidden Login Portal:** The login screen is completely hidden from regular web traffic. You must know the exact URL parameter to access it.
-- **Flat-File Database:** Uses a single SQLite `data.db` file. No complex MySQL setup required.
-- **Protected Assets:** An included `.htaccess` file prevents visitors from directly downloading your database or viewing directory contents.
-- **User Management:** Supports multiple users with 'Admin' and 'User' roles, plus secure password resets.
+Editor.js tools currently wired in:
 
-### 🌍 Public Viewer
-Share your work selectively.
-- **Draft & Publish:** Pages are saved as drafts automatically. You control when a page goes live.
-- **Public Links:** Toggle "Public" to generate a unique, read-only link.
-- **Sidebar Navigation:** The public viewer automatically builds a responsive sidebar menu (with mobile support) so guests can browse through all public Spaces, Pages, and Subpages.
+- Header
+- List
+- Checklist
+- Code
+- Table
+- Quote
+- Warning
+- Delimiter
+- Inline code
+- Image
+- Embed
+- Text color plugin
 
-### ⚡ Real-Time Channels & Webhooks
-- **Channels:** Create dedicated streams within your workspace.
-- **Webhooks:** Generate unique Webhook URLs for channels to receive and display external automated messages or logs in real-time.
-- **Admin Terminal:** A built-in command-line interface for quick actions (e.g., `/create`, `/delete`).
+### Draft and Publish Model
 
-## 📁 File Structure
+- Draft save is automatic while editing.
+- `Publish` copies draft content/title/banner to the live version.
+- `Live` toggle controls public visibility (`is_public`).
+- Public URL format: `p.php?s=<slug>`.
 
-- `index.php`: The core application. Handles the setup process, the hidden login gateway, and the Vue.js Single Page Application (SPA).
-- `api.php`: The secure REST API communicating with the database and handling file uploads.
-- `p.php`: The public viewer for shared pages.
-- `auth.php`: Core authentication, session management, and database initialization.
-- `reset.php`: Handles secure password recovery via email.
-- `webhook.php`: Endpoint for receiving external webhook payloads.
-- `assets/js/app.js`: The frontend Vue.js logic and Editor.js configuration.
-- `style.css`: Custom dark-mode styling (Tailwind CSS is loaded via CDN).
-- `.htaccess`: Apache configuration to block direct file access.
-- `data.db`: The SQLite database (automatically generated).
-- `uploads/`: Directory for banner images (automatically generated).
+### Banner Management
 
-## 🛠️ Installation & Setup
+- Add/change/remove banner from the page header.
+- Crop flow is built in (Cropper.js).
+- Cropped image is uploaded to `uploads/` and saved on the page.
 
-1. Create a new directory on your web server (e.g., `/lunardesk/`).
-2. Upload all the files into this directory. 
-3. Ensure the directory has correct write permissions (CHMOD 755 or 777) so PHP can generate the `data.db` file and the `uploads/` folder.
-4. Navigate to the directory in your web browser. 
-5. The system will detect a fresh install and present the **First Install Setup** screen.
-6. Enter your desired Username, Email, Display Name, and Password to create the administrator account.
+### Channels and Webhooks
 
-## 🔑 How to Log In (The Hidden Portal)
+- Create channels ("rooms") in the left panel.
+- Generate or revoke webhook keys per room.
+- Receive JSON payloads at `webhook.php?key=<room_key>`.
+- Clear a room stream from the UI.
 
-For security, navigating to the standard directory URL once the setup is complete will result in a fake `403 Forbidden` message. 
+### Admin Terminal
 
-To access the login screen, you must append `?portal=open` to the URL.
-- **Example:** `https://yourdomain.com/lunardesk/index.php?portal=open`
+Available commands:
 
-## ⚠️ Beta Notice
+- `/help`
+- `/ping`
+- `/status`
+- `/version`
+- `/delete` (admin only, with YES/NO confirmation)
 
-**LunarDesk is currently in Beta.** This means the software is provided as-is and bugs or unexpected errors may occur. It is highly recommended not to use this system for critical or production work yet. 
+### Accounts and Access
 
-Always keep a local backup of your textual data, as the database structure might undergo breaking changes in future updates.
+- First run creates the first account as `admin`.
+- Admin can invite users from the Users modal.
+- Invite uses a token link through `reset.php`.
+- Password reset request flow: `reset_request.php` -> email link -> `reset.php`.
 
-Found a bug or have a feature request? Please report it here:
-[https://github.com/ByAldon/LunarDesk/issues](https://github.com/ByAldon/LunarDesk/issues)
+## Tech Stack
 
----
-*LunarDesk — Made by [Aldon](https://github.com/ByAldon)*
+- PHP (server-rendered pages + JSON API)
+- SQLite (`data.db`)
+- Vue 3 (frontend app in `assets/js/app.js`)
+- Tailwind CSS via CDN
+- Editor.js + plugins
+- Cropper.js
+
+## Project Structure
+
+- `index.php`: Authenticated admin workspace UI.
+- `api.php`: Main authenticated JSON API for workspace operations.
+- `p.php`: Public read-only page viewer.
+- `auth.php`: Session/auth bootstrap and initial DB/table setup.
+- `webhook.php`: Public webhook ingest endpoint for channel messages.
+- `reset_request.php`: Password reset request form.
+- `reset.php`: Password reset and invite completion form.
+- `assets/js/app.js`: Vue app logic.
+- `assets/style.css`: Shared styling overrides.
+- `.htaccess`: Blocks direct access to sensitive file types and directory listing.
+- `version.php`: App version + default timezone setup.
+
+## Installation
+
+1. Copy the project to your web root (for example `C:\wamp64\www\lunardesk`).
+2. Make sure PHP can write in the project directory.
+3. Open `index.php` in the browser.
+4. On first run, create the initial admin account.
+
+LunarDesk creates these automatically when needed:
+
+- `data.db`
+- `uploads/`
+
+## Quick Usage
+
+1. Log in at `index.php`.
+2. Create a space.
+3. Create a page or subpage.
+4. Edit content and banner.
+5. Toggle `Live` if you want it publicly visible.
+6. Click `Publish` to push draft to live.
+7. Share `p.php?s=<slug>`.
+
+## Webhook Example
+
+```bash
+curl -X POST "https://your-domain/lunardesk/webhook.php?key=ROOM_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"sender\":\"CI\",\"content\":\"Build finished successfully\"}"
+```
+
+Accepted payload shape:
+
+- `sender`: optional string (defaults to `Signal`)
+- `content`: optional string/object
+
+## Security Notes
+
+- API endpoints require authenticated session (`api.php` returns `401` when not logged in).
+- `.htaccess` blocks direct access to `.db`, `.sqlite`, `.sqlite3`, `.md`, `.json`.
+- Keep server/PHP updated and use HTTPS in production.
+- Mail delivery depends on server mail configuration (`mail()`).
+
+## Known Behavior
+
+- Timestamps are stored/displayed with UTC defaults from `version.php`.
+- Public viewer only loads pages where `is_public = 1`.
+- Deleting a page also deletes direct children with matching `parent_id`.
+
+## Support
+
+Issues and feature requests:
+
+`https://github.com/ByAldon/LunarDesk/issues`
+
