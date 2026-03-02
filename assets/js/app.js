@@ -18,6 +18,8 @@ createApp({
             lastSavedPublic: null,
             lastSavedCover: null,
             lastSaveTime: null,
+            publishNotice: '',
+            publishNoticeTimer: null,
             needsSave: false,
             rooms: [],
             activeRoom: null,
@@ -250,11 +252,19 @@ createApp({
                     this.activePage.cover_image = publishCover;
                     this.lastSavedContent = str; this.lastSavedTitle = this.activePage.title; this.lastSavedPublic = this.activePage.is_public; 
                     this.lastSavedCover = publishCover; this.lastSaveTime = this.getFormattedDateTime(); this.needsSave = false; this.activePage.has_draft = 0; 
-                    this.showAlert("Signal Active", "Live view updated.");
+                    this.showPublishNotice('Live page updated.');
                 } catch (e) { }
             }
             await this.fetchData(); 
             this.loading = false;
+        },
+        showPublishNotice(message) {
+            this.publishNotice = message;
+            if (this.publishNoticeTimer) clearTimeout(this.publishNoticeTimer);
+            this.publishNoticeTimer = setTimeout(() => {
+                this.publishNotice = '';
+                this.publishNoticeTimer = null;
+            }, 3000);
         },
         copyPublicLink() {
             if (!this.activePage || !this.activePage.slug) return;
@@ -524,6 +534,20 @@ createApp({
                 this.showProfileModal = false;
                 this.fetchUser();
             }
+        },
+        async hardRefresh() {
+            try {
+                if ('caches' in window) {
+                    const keys = await caches.keys();
+                    await Promise.all(keys.map(k => caches.delete(k)));
+                }
+            } catch (e) {
+                console.error(e);
+            }
+
+            const url = new URL(window.location.href);
+            url.searchParams.set('refresh', Date.now().toString());
+            window.location.replace(url.toString());
         },
         async openUsersModal() {
             const r = await fetch('api.php?action=users');

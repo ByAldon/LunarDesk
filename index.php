@@ -44,6 +44,7 @@ include 'version.php';
                 <button v-if="currentUser" @click="profileForm = { username: currentUser.username, nickname: currentUser.nickname, email: currentUser.email, password: '' }; showProfileModal = true" class="text-[10px] text-slate-300 hover:text-white font-black uppercase tracking-widest transition-colors">{{ currentUser.nickname || currentUser.username }}</button>
                 <div class="h-4 w-px bg-slate-600"></div>
                 <button v-if="currentUser?.role === 'admin'" @click="openUsersModal" class="text-slate-300 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors">Users</button>
+                <button @click="hardRefresh" class="text-slate-300 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors">Hard Refresh</button>
                 <a href="?action=logout" class="text-red-400 hover:text-red-300 text-[10px] font-black uppercase tracking-widest transition-colors">Logout</a>
             </div>
         </header>
@@ -183,17 +184,20 @@ include 'version.php';
                         </header>
 
                         <div class="sticky top-0 bg-slate-800/95 backdrop-blur-md z-30 p-4 px-12 flex justify-between items-center border-b border-slate-700 shadow-md">
-                            <div class="flex items-center gap-6">
-                                <label class="flex items-center text-[10px] font-black uppercase text-slate-300 gap-3 cursor-pointer hover:text-white transition-colors">
-                                    <span>Live</span>
-                                    <input type="checkbox" v-model="activePage.is_public" @change="autoSave" :true-value="1" :false-value="0" class="accent-blue-500 w-5 h-5 rounded-md cursor-pointer">
-                                </label>
-                                <span v-if="lastSaveTime" class="text-blue-400 font-mono text-[10px] tracking-widest uppercase">Signal: {{ lastSaveTime }}</span>
-                                <span v-if="activePage.has_draft == 1" class="text-amber-500 font-black animate-pulse uppercase text-[10px] tracking-widest bg-amber-500/10 px-3 py-1 rounded-md">Unpublished</span>
+                            <div class="flex flex-col gap-2">
+                                <div class="flex items-center gap-6">
+                                    <label class="flex items-center text-[10px] font-black uppercase text-slate-300 gap-3 cursor-pointer hover:text-white transition-colors">
+                                        <span>Live</span>
+                                        <input type="checkbox" v-model="activePage.is_public" @change="autoSave" :true-value="1" :false-value="0" class="accent-blue-500 w-5 h-5 rounded-md cursor-pointer">
+                                    </label>
+                                    <span v-if="lastSaveTime" class="text-blue-400 font-mono text-[10px] tracking-widest uppercase">Signal: {{ lastSaveTime }}</span>
+                                    <span v-if="activePage.has_draft == 1" class="text-amber-500 font-black animate-pulse uppercase text-[10px] tracking-widest bg-amber-500/10 px-3 py-1 rounded-md">Unpublished</span>
+                                </div>
                                 <span class="text-slate-400 font-mono text-[10px] tracking-widest uppercase">{{ getItemMetaLabel(activePage) }}</span>
                             </div>
                             
                             <div class="flex items-center gap-3">
+                                <span v-if="publishNotice" class="text-emerald-400 font-mono text-[10px] tracking-widest uppercase">{{ publishNotice }}</span>
                                 <template v-if="activePage.is_public == 1">
                                     <button @click="copyPublicLink" class="bg-slate-700 hover:bg-slate-600 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-2 border border-slate-600">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>

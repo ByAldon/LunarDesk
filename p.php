@@ -92,7 +92,7 @@ $metaText = implode(' ', $metaParts);
                         <?php foreach ($spages as $sp): ?>
                             <li class="nav-item">
                                 <a href="?s=<?php echo $sp['slug']; ?>" class="flex items-center px-4 py-2 text-sm <?php echo $sp['slug'] == $slug ? 'bg-slate-950 text-white font-bold nav-item-active shadow-inner' : 'text-slate-600 hover:text-white'; ?>">
-                                    <div class="nav-indicator"></div><?php echo $sp['title']; ?>
+                                    <?php echo $sp['title']; ?>
                                 </a>
                                 <?php $subpages = array_filter($items, fn($i) => $i['type'] === 'subpage' && $i['parent_id'] == $sp['id'] && $i['is_public'] == 1); ?>
                                 <?php if (!empty($subpages)): ?>
@@ -100,7 +100,7 @@ $metaText = implode(' ', $metaParts);
                                         <?php foreach ($subpages as $subp): ?>
                                             <li class="nav-item">
                                                 <a href="?s=<?php echo $subp['slug']; ?>" class="flex items-center pl-4 pr-2 py-1.5 text-xs <?php echo $subp['slug'] == $slug ? 'bg-slate-950 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-600 hover:text-slate-400'; ?>">
-                                                    <div class="nav-indicator"></div><?php echo $subp['title']; ?>
+                                                    <?php echo $subp['title']; ?>
                                                 </a>
                                             </li>
                                         <?php endforeach; ?>
