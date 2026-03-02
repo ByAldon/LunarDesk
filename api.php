@@ -5,6 +5,20 @@ header('Content-Type: application/json');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
+const LUNARDESK_SESSION_IDLE_TIMEOUT = 7200;
+
+if (!empty($_SESSION['logged_in']) && empty($_SESSION['remember_session'])) {
+    $now = time();
+    if (!empty($_SESSION['last_activity']) && ($now - (int)$_SESSION['last_activity']) > LUNARDESK_SESSION_IDLE_TIMEOUT) {
+        session_unset();
+        session_destroy();
+        setcookie(session_name(), '', time() - 3600, '/');
+        http_response_code(401);
+        echo json_encode(['error' => 'Session expired']);
+        exit;
+    }
+    $_SESSION['last_activity'] = $now;
+}
 
 if (empty($_SESSION['logged_in'])) {
     http_response_code(401);

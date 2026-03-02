@@ -171,12 +171,25 @@ $metaText = implode(' ', $metaParts);
                     });
                 });
             };
+            const applyPaddings = (rows, block) => {
+                const paddings = (block.data && block.data.cellPaddings) ? block.data.cellPaddings : {};
+                Object.keys(paddings).forEach((key) => {
+                    const parts = key.split('-');
+                    const rIdx = Number(parts[0]);
+                    const cIdx = Number(parts[1]);
+                    if (!Number.isFinite(rIdx) || !Number.isFinite(cIdx)) return;
+                    const cell = rows[rIdx] && rows[rIdx][cIdx];
+                    if (!cell) return;
+                    cell.style.padding = String(paddings[key]);
+                });
+            };
             tableBlocks.forEach((block, tableIdx) => {
                 const colorMap = (block.data && block.data.cellColors) ? block.data.cellColors : {};
                 const tableEl = domTables[tableIdx];
                 if (!tableEl) return;
                 const rows = getRows(tableEl);
                 applySizes(rows, block);
+                applyPaddings(rows, block);
                 rows.forEach((cells, rIdx) => {
                     cells.forEach((cell, cIdx) => {
                         const key = `${rIdx}-${cIdx}`;

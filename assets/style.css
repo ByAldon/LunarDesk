@@ -83,6 +83,25 @@ body { font-family: 'Inter', sans-serif; background-color: var(--bg-primary); co
     opacity: 1;
 }
 
+#editorjs .ld-table-checkbox {
+    width: 14px;
+    height: 14px;
+    accent-color: #ffffff;
+    vertical-align: middle;
+}
+
+#editorjs .ld-table-radio {
+    width: 14px;
+    height: 14px;
+    accent-color: #ffffff;
+    vertical-align: middle;
+}
+
+body.public-page #editorjs .ld-table-checkbox,
+body.public-page #editorjs .ld-table-radio {
+    pointer-events: none;
+}
+
 #editorjs .tc-table,
 #editorjs table {
     width: 100%;
@@ -96,9 +115,11 @@ body { font-family: 'Inter', sans-serif; background-color: var(--bg-primary); co
 #editorjs table td,
 #editorjs table th {
     border: 1px solid #334155 !important;
-    padding: 10px 12px;
+    padding: 14px 16px;
     background: rgba(15, 23, 42, 0.35);
     color: #e2e8f0;
+    line-height: 1.5;
+    min-height: 52px;
 }
 
 #editorjs .tc-table .tc-cell:focus,
@@ -130,7 +151,8 @@ body.public-page #editorjs table td,
 body.public-page #editorjs table th {
     background: rgba(15, 23, 42, 0.2);
     padding: 12px 14px;
-    min-height: 44px;
+    min-height: 52px;
+    line-height: 1.5;
     vertical-align: top;
 }
 

@@ -6,6 +6,32 @@ if (session_status() === PHP_SESSION_NONE) {
 
 include 'version.php';
 $dbPath = __DIR__ . '/data.db';
+const LUNARDESK_REMEMBER_COOKIE = 'lunardesk_remember';
+const LUNARDESK_SESSION_IDLE_TIMEOUT = 7200;
+
+function cookieSecureFlag() {
+    return !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+}
+
+function setRememberCookie(string $value, int $expires): void {
+    setcookie(LUNARDESK_REMEMBER_COOKIE, $value, [
+        'expires' => $expires,
+        'path' => '/',
+        'secure' => cookieSecureFlag(),
+        'httponly' => true,
+        'samesite' => 'Lax'
+    ]);
+}
+
+function clearRememberCookie(): void {
+    setcookie(LUNARDESK_REMEMBER_COOKIE, '', [
+        'expires' => time() - 3600,
+        'path' => '/',
+        'secure' => cookieSecureFlag(),
+        'httponly' => true,
+        'samesite' => 'Lax'
+    ]);
+}
 
 try {
     $db = new PDO("sqlite:$dbPath");
@@ -15,14 +41,68 @@ try {
     $db->exec("CREATE TABLE IF NOT EXISTS admin_terminal (id INTEGER PRIMARY KEY AUTOINCREMENT, sender TEXT, content TEXT, colorClass TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
     $db->exec("CREATE TABLE IF NOT EXISTS rooms (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, webhook_key TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
     $db->exec("CREATE TABLE IF NOT EXISTS webhook_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, room_id INTEGER, sender TEXT, content TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    try {
+        $db->exec("ALTER TABLE users ADD COLUMN remember_selector TEXT");
+    } catch (PDOException $e) { }
+    try {
+        $db->exec("ALTER TABLE users ADD COLUMN remember_token_hash TEXT");
+    } catch (PDOException $e) { }
+    try {
+        $db->exec("ALTER TABLE users ADD COLUMN remember_expires INTEGER");
+    } catch (PDOException $e) { }
     $userCount = $db->query("SELECT COUNT(*) FROM users")->fetchColumn();
 } catch (Exception $e) { die("LOCK"); }
 
 if (isset($_GET['action']) && $_GET['action'] === 'logout') { 
+    if (!empty($_SESSION['user_id'])) {
+        $db->prepare("UPDATE users SET remember_selector = NULL, remember_token_hash = NULL, remember_expires = NULL WHERE id = ?")
+           ->execute([$_SESSION['user_id']]);
+    } elseif (!empty($_COOKIE[LUNARDESK_REMEMBER_COOKIE])) {
+        $parts = explode(':', $_COOKIE[LUNARDESK_REMEMBER_COOKIE], 2);
+        if (count($parts) === 2) {
+            $db->prepare("UPDATE users SET remember_selector = NULL, remember_token_hash = NULL, remember_expires = NULL WHERE remember_selector = ?")
+               ->execute([$parts[0]]);
+        }
+    }
+    clearRememberCookie();
     session_destroy(); 
     setcookie(session_name(), '', time() - 3600, '/'); 
     header("Location: index.php"); 
     exit; 
+}
+
+if (empty($_SESSION['logged_in']) && !empty($_COOKIE[LUNARDESK_REMEMBER_COOKIE])) {
+    $parts = explode(':', $_COOKIE[LUNARDESK_REMEMBER_COOKIE], 2);
+    if (count($parts) === 2) {
+        [$selector, $token] = $parts;
+        $stmt = $db->prepare("SELECT * FROM users WHERE remember_selector = ? AND remember_expires > ?");
+        $stmt->execute([$selector, time()]);
+        $u = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($u && !empty($u['remember_token_hash']) && password_verify($token, $u['remember_token_hash'])) {
+            $_SESSION['logged_in'] = true;
+            $_SESSION['username'] = $u['username'];
+            $_SESSION['user_id'] = $u['id'];
+            $_SESSION['role'] = $u['role'];
+            $_SESSION['remember_session'] = true;
+            $_SESSION['last_activity'] = time();
+        } else {
+            clearRememberCookie();
+        }
+    } else {
+        clearRememberCookie();
+    }
+}
+
+if (!empty($_SESSION['logged_in']) && empty($_SESSION['remember_session'])) {
+    $now = time();
+    if (!empty($_SESSION['last_activity']) && ($now - (int)$_SESSION['last_activity']) > LUNARDESK_SESSION_IDLE_TIMEOUT) {
+        session_unset();
+        session_destroy();
+        setcookie(session_name(), '', time() - 3600, '/');
+        header("Location: index.php");
+        exit;
+    }
+    $_SESSION['last_activity'] = $now;
 }
 
 if ($userCount == 0) {
@@ -33,6 +113,8 @@ if ($userCount == 0) {
         $_SESSION['username'] = trim($_POST['u']); 
         $_SESSION['user_id'] = $db->lastInsertId(); 
         $_SESSION['role'] = 'admin'; 
+        $_SESSION['remember_session'] = false;
+        $_SESSION['last_activity'] = time();
         session_write_close();
         header("Location: index.php"); 
         exit;
@@ -83,7 +165,23 @@ if (empty($_SESSION['logged_in'])) {
                     $_SESSION['logged_in'] = true; 
                     $_SESSION['username'] = $u['username']; 
                     $_SESSION['user_id'] = $u['id']; 
-                    $_SESSION['role'] = $u['role']; 
+                    $_SESSION['role'] = $u['role'];
+                    $_SESSION['last_activity'] = time();
+                    if (!empty($_POST['remember_session'])) {
+                        $_SESSION['remember_session'] = true;
+                        $selector = bin2hex(random_bytes(9));
+                        $token = bin2hex(random_bytes(32));
+                        $expires = time() + (60 * 60 * 24 * 30);
+                        $tokenHash = password_hash($token, PASSWORD_DEFAULT);
+                        $db->prepare("UPDATE users SET remember_selector = ?, remember_token_hash = ?, remember_expires = ? WHERE id = ?")
+                           ->execute([$selector, $tokenHash, $expires, $u['id']]);
+                        setRememberCookie($selector . ':' . $token, $expires);
+                    } else {
+                        $_SESSION['remember_session'] = false;
+                        $db->prepare("UPDATE users SET remember_selector = NULL, remember_token_hash = NULL, remember_expires = NULL WHERE id = ?")
+                           ->execute([$u['id']]);
+                        clearRememberCookie();
+                    }
                     session_write_close(); 
                     header("Location: index.php"); 
                     exit;
@@ -114,6 +212,10 @@ if (empty($_SESSION['logged_in'])) {
         
         <input type="text" name="un" placeholder="User" required style="box-sizing:border-box;display:block;width:100%;background:#020617;padding:12px;color:white;margin-bottom:10px;border:none;outline:none;">
         <input type="password" name="pw" placeholder="Pass" required style="box-sizing:border-box;display:block;width:100%;background:#020617;padding:12px;color:white;margin-bottom:20px;border:none;outline:none;">
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px;color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;">
+            <input type="checkbox" name="remember_session" value="1" style="width:14px;height:14px;accent-color:#3b82f6;cursor:pointer;">
+            Remember Session
+        </label>
         <button style="box-sizing:border-box;width:100%;background:#2563eb;padding:14px;color:white;font-weight:900;border:none;border-radius:12px;cursor:pointer;text-transform:uppercase;letter-spacing:0.1em;box-shadow:0 4px 15px rgba(37,99,235,0.3); margin-bottom: 12px;">ENTER</button>
         
 <div style="text-align:center;">

@@ -271,6 +271,8 @@ createApp({
                         this.bindTableCellColorPicker();
                         this.applyTableCellColorsFromData(initialData);
                         this.applyTableCellSizesFromData(initialData);
+                        this.applyTableCellPaddingsFromData(initialData);
+                        this.normalizeRadioGroupsByCell();
                     },
                     onChange: () => {
                         this.needsSave = true;
@@ -286,7 +288,8 @@ createApp({
                     const raw = await globalEditorInstance.save();
                     const withTableColors = this.captureTableCellColors(raw);
                     const withTableSizes = this.captureTableCellSizes(withTableColors);
-                    const out = this.extractCellColors(withTableSizes);
+                    const withTablePaddings = this.captureTableCellPaddings(withTableSizes);
+                    const out = this.extractCellColors(withTablePaddings);
                     const str = JSON.stringify(out);
                     if (str !== this.lastSavedContent || this.activePage.title !== this.lastSavedTitle || this.activePage.is_public !== this.lastSavedPublic || this.activePage.cover_image !== this.lastSavedCover) {
                         await fetch('api.php', {
@@ -318,7 +321,8 @@ createApp({
                     const raw = await globalEditorInstance.save(); 
                     const withTableColors = this.captureTableCellColors(raw);
                     const withTableSizes = this.captureTableCellSizes(withTableColors);
-                    const out = this.extractCellColors(withTableSizes); 
+                    const withTablePaddings = this.captureTableCellPaddings(withTableSizes);
+                    const out = this.extractCellColors(withTablePaddings); 
                     const str = JSON.stringify(out);
                     const publishCover = this.activePage.draft_cover_image || this.activePage.cover_image || '';
                     await fetch('api.php', {
@@ -761,7 +765,7 @@ createApp({
                 menu.style.border = '1px solid #334155';
                 menu.style.borderRadius = '10px';
                 menu.style.boxShadow = '0 10px 30px rgba(0,0,0,0.45)';
-                menu.style.minWidth = '170px';
+                menu.style.minWidth = '220px';
 
                 const title = document.createElement('div');
                 title.textContent = 'Cell background';
@@ -846,8 +850,9 @@ createApp({
                 insertButtons.style.gridTemplateColumns = '1fr 1fr';
                 insertButtons.style.gap = '6px';
                 insertButtons.style.marginBottom = '8px';
-                insertButtons.appendChild(makeFormatBtn('Checkbox', () => this.insertIntoActiveCell('☐ ')));
-                insertButtons.appendChild(makeFormatBtn('Bullet', () => this.insertIntoActiveCell('• ')));
+                insertButtons.appendChild(makeFormatBtn('Checkbox', () => this.insertCheckboxIntoActiveCell()));
+                insertButtons.appendChild(makeFormatBtn('Radio', () => this.insertRadioIntoActiveCell()));
+                insertButtons.appendChild(makeFormatBtn('Bullet', () => this.insertIntoActiveCell('\u2022 ')));
                 menu.appendChild(insertButtons);
 
                 const sizeTitle = document.createElement('div');
@@ -915,6 +920,44 @@ createApp({
                 menu.appendChild(sizeControls);
                 this._tableCellWidthLabel = widthGroup.label;
                 this._tableCellHeightLabel = heightGroup.label;
+
+                const paddingControls = document.createElement('div');
+                paddingControls.style.display = 'grid';
+                paddingControls.style.gridTemplateColumns = '24px 1fr 24px';
+                paddingControls.style.alignItems = 'center';
+                paddingControls.style.gap = '4px';
+                paddingControls.style.marginBottom = '8px';
+                const padMinus = document.createElement('button');
+                padMinus.type = 'button';
+                padMinus.textContent = '-';
+                padMinus.style.height = '22px';
+                padMinus.style.borderRadius = '6px';
+                padMinus.style.background = '#1e293b';
+                padMinus.style.border = '1px solid #334155';
+                padMinus.style.color = '#e2e8f0';
+                padMinus.style.cursor = 'pointer';
+                padMinus.addEventListener('click', () => this.adjustActiveCellPadding(-2));
+                const padLabel = document.createElement('div');
+                padLabel.textContent = 'P 14';
+                padLabel.style.textAlign = 'center';
+                padLabel.style.fontSize = '10px';
+                padLabel.style.color = '#cbd5e1';
+                padLabel.style.fontWeight = '700';
+                const padPlus = document.createElement('button');
+                padPlus.type = 'button';
+                padPlus.textContent = '+';
+                padPlus.style.height = '22px';
+                padPlus.style.borderRadius = '6px';
+                padPlus.style.background = '#1e293b';
+                padPlus.style.border = '1px solid #334155';
+                padPlus.style.color = '#e2e8f0';
+                padPlus.style.cursor = 'pointer';
+                padPlus.addEventListener('click', () => this.adjustActiveCellPadding(2));
+                paddingControls.appendChild(padMinus);
+                paddingControls.appendChild(padLabel);
+                paddingControls.appendChild(padPlus);
+                menu.appendChild(paddingControls);
+                this._tableCellPaddingLabel = padLabel;
 
                 const actions = document.createElement('div');
                 actions.style.display = 'flex';
@@ -989,11 +1032,24 @@ createApp({
                 window.addEventListener('scroll', this._tableColorRepositionHandler, true);
             }
 
+            if (!this._tableCheckboxChangeHandler) {
+                this._tableCheckboxChangeHandler = (event) => {
+                    const input = event.target && event.target.closest ? event.target.closest('.ld-table-checkbox, .ld-table-radio') : null;
+                    if (!input || !holder.contains(input)) return;
+                    this.needsSave = true;
+                    this.autoSave();
+                };
+                holder.addEventListener('change', this._tableCheckboxChangeHandler);
+            }
+
             if (this._tableCellClickHandler) {
                 holder.removeEventListener('click', this._tableCellClickHandler);
             }
 
             this._tableCellClickHandler = (event) => {
+                if (event.target && event.target.closest && event.target.closest('.ld-table-checkbox, .ld-table-radio')) {
+                    return;
+                }
                 const cell = event.target.closest('.tc-cell, td, th');
                 if (!cell || !holder.contains(cell)) return;
                 this._activeTableCell = cell;
@@ -1006,8 +1062,8 @@ createApp({
         positionTableCellColorMenu(cell) {
             if (!this._tableCellColorMenu || !cell) return;
             const rect = cell.getBoundingClientRect();
-            const menuW = 190;
-            const menuH = 140;
+            const menuW = 230;
+            const menuH = 260;
             const maxX = Math.max(8, window.innerWidth - menuW - 8);
             const maxY = Math.max(8, window.innerHeight - menuH - 8);
             const left = Math.max(8, Math.min(rect.left, maxX));
@@ -1035,6 +1091,57 @@ createApp({
             document.execCommand('insertText', false, text);
             this.needsSave = true;
             this.autoSave();
+        },
+        insertCheckboxIntoActiveCell() {
+            if (!this._activeTableCell) return;
+            this._activeTableCell.focus();
+            this.ensureCaretInActiveCell();
+            document.execCommand(
+                'insertHTML',
+                false,
+                '<input type="checkbox" class="ld-table-checkbox" contenteditable="false"> '
+            );
+            this.needsSave = true;
+            this.autoSave();
+        },
+        insertRadioIntoActiveCell() {
+            if (!this._activeTableCell) return;
+            this._activeTableCell.focus();
+            this.ensureCaretInActiveCell();
+            const group = this.getRadioGroupNameForActiveCell();
+            document.execCommand(
+                'insertHTML',
+                false,
+                `<input type="radio" class="ld-table-radio" name="${group}" contenteditable="false"> `
+            );
+            this.needsSave = true;
+            this.autoSave();
+        },
+        getRadioGroupNameForActiveCell() {
+            const cell = this._activeTableCell;
+            if (!cell) return `ld_radio_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+            if (!cell.dataset.ldRadioGroup) {
+                const pageId = this.activePage && this.activePage.id ? String(this.activePage.id) : 'draft';
+                cell.dataset.ldRadioGroup = `ld_radio_${pageId}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+            }
+            return cell.dataset.ldRadioGroup;
+        },
+        normalizeRadioGroupsByCell() {
+            const holder = document.getElementById('editorjs');
+            if (!holder) return;
+            const cells = Array.from(holder.querySelectorAll('.tc-cell, td, th'));
+            cells.forEach((cell, idx) => {
+                const radios = Array.from(cell.querySelectorAll('.ld-table-radio'));
+                if (radios.length === 0) return;
+                if (!cell.dataset.ldRadioGroup) {
+                    const pageId = this.activePage && this.activePage.id ? String(this.activePage.id) : 'draft';
+                    cell.dataset.ldRadioGroup = `ld_radio_${pageId}_cell_${idx}`;
+                }
+                const group = cell.dataset.ldRadioGroup;
+                radios.forEach((radio) => {
+                    radio.name = group;
+                });
+            });
         },
         ensureCaretInActiveCell() {
             if (!this._activeTableCell) return;
@@ -1080,6 +1187,15 @@ createApp({
             this.needsSave = true;
             this.autoSave();
         },
+        adjustActiveCellPadding(delta) {
+            if (!this._activeTableCell) return;
+            const current = this.getActiveCellPadding();
+            const next = Math.max(4, Math.min(40, current + delta));
+            this._activeTableCell.style.padding = `${next}px`;
+            this.refreshActiveCellSizeLabels();
+            this.needsSave = true;
+            this.autoSave();
+        },
         refreshActiveCellSizeLabels() {
             if (!this._activeTableCell) return;
             const tableEl = this._activeTableCell.closest('.tc-table, table');
@@ -1095,6 +1211,10 @@ createApp({
             if (this._tableCellHeightLabel) {
                 const height = this.getCellPixelSize(rows[pos.rIdx] && rows[pos.rIdx][0], 'height', 44);
                 this._tableCellHeightLabel.textContent = `H ${Math.round(height)}`;
+            }
+            if (this._tableCellPaddingLabel) {
+                const pad = this.getActiveCellPadding();
+                this._tableCellPaddingLabel.textContent = `P ${Math.round(pad)}`;
             }
         },
         applyTableCellColorsFromData(data) {
@@ -1222,6 +1342,47 @@ createApp({
 
             return data;
         },
+        applyTableCellPaddingsFromData(data) {
+            if (!data || !Array.isArray(data.blocks)) return;
+            const tableBlocks = data.blocks.filter(b => b.type === 'table');
+            const domTables = Array.from(document.querySelectorAll('#editorjs .tc-table, #editorjs table'));
+            tableBlocks.forEach((block, tableIdx) => {
+                const tableEl = domTables[tableIdx];
+                if (!tableEl) return;
+                const rows = this.getTableRows(tableEl);
+                const paddings = (block.data && block.data.cellPaddings) ? block.data.cellPaddings : {};
+                Object.keys(paddings).forEach((key) => {
+                    const parts = key.split('-');
+                    const rIdx = Number(parts[0]);
+                    const cIdx = Number(parts[1]);
+                    if (!Number.isFinite(rIdx) || !Number.isFinite(cIdx)) return;
+                    const cell = rows[rIdx] && rows[rIdx][cIdx];
+                    if (!cell) return;
+                    cell.style.padding = String(paddings[key]);
+                });
+            });
+        },
+        captureTableCellPaddings(data) {
+            if (!data || !Array.isArray(data.blocks)) return data;
+            const tableBlocks = data.blocks.filter(b => b.type === 'table');
+            const domTables = Array.from(document.querySelectorAll('#editorjs .tc-table, #editorjs table'));
+            tableBlocks.forEach((block, tableIdx) => {
+                const tableEl = domTables[tableIdx];
+                if (!tableEl) return;
+                const rows = this.getTableRows(tableEl);
+                const paddings = {};
+                rows.forEach((cells, rIdx) => {
+                    cells.forEach((cell, cIdx) => {
+                        const value = (cell.style.padding || '').trim();
+                        if (value) paddings[`${rIdx}-${cIdx}`] = value;
+                    });
+                });
+                if (!block.data) block.data = {};
+                if (Object.keys(paddings).length > 0) block.data.cellPaddings = paddings;
+                else delete block.data.cellPaddings;
+            });
+            return data;
+        },
         getTableRows(tableEl) {
             if (!tableEl) return [];
             const tcRows = Array.from(tableEl.querySelectorAll('.tc-row'));
@@ -1245,6 +1406,14 @@ createApp({
             const rect = cell.getBoundingClientRect();
             const measured = axis === 'width' ? rect.width : rect.height;
             return Number.isFinite(measured) && measured > 0 ? measured : fallback;
+        },
+        getActiveCellPadding() {
+            if (!this._activeTableCell) return 14;
+            const styled = parseFloat(this._activeTableCell.style.padding);
+            if (Number.isFinite(styled) && styled > 0) return styled;
+            const computed = window.getComputedStyle(this._activeTableCell);
+            const top = parseFloat(computed.paddingTop);
+            return Number.isFinite(top) && top > 0 ? top : 14;
         },
         toHexColor(color) {
             if (!color) return '#1e293b';
