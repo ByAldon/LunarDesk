@@ -87,14 +87,20 @@ body { font-family: 'Inter', sans-serif; background-color: var(--bg-primary); co
     width: 14px;
     height: 14px;
     accent-color: #ffffff;
-    vertical-align: middle;
+    vertical-align: text-bottom;
+    position: relative;
+    top: -1px;
+    margin-right: 6px;
 }
 
 #editorjs .ld-table-radio {
     width: 14px;
     height: 14px;
     accent-color: #ffffff;
-    vertical-align: middle;
+    vertical-align: text-bottom;
+    position: relative;
+    top: -1px;
+    margin-right: 6px;
 }
 
 body.public-page #editorjs .ld-table-checkbox,
@@ -107,6 +113,7 @@ body.public-page #editorjs .ld-table-radio {
     width: 100%;
     table-layout: fixed;
     border-collapse: collapse;
+    border-spacing: 0;
     background: rgba(15, 23, 42, 0.35);
     border: 1px solid #334155 !important;
 }
@@ -114,12 +121,34 @@ body.public-page #editorjs .ld-table-radio {
 #editorjs .tc-table .tc-cell,
 #editorjs table td,
 #editorjs table th {
-    border: 1px solid #334155 !important;
+    border-right: 1px solid #334155 !important;
+    border-bottom: 1px solid #334155 !important;
+    border-left: none !important;
+    border-top: none !important;
     padding: 14px 16px;
     background: rgba(15, 23, 42, 0.35);
     color: #e2e8f0;
     line-height: 1.5;
     min-height: 52px;
+    vertical-align: middle;
+    text-align: left;
+}
+
+#editorjs .tc-table .tc-cell {
+    display: flex;
+    align-items: center;
+}
+
+#editorjs .tc-table .tc-row .tc-cell:last-child,
+#editorjs table tr > td:last-child,
+#editorjs table tr > th:last-child {
+    border-right: none !important;
+}
+
+#editorjs .tc-table .tc-row:last-child .tc-cell,
+#editorjs table tr:last-child > td,
+#editorjs table tr:last-child > th {
+    border-bottom: none !important;
 }
 
 #editorjs .tc-table .tc-cell:focus,
@@ -133,12 +162,14 @@ body.public-page #editorjs .tc-table,
 body.public-page #editorjs table {
     width: 100%;
     table-layout: fixed;
-    background: rgba(15, 23, 42, 0.22);
+    border-collapse: collapse;
+    border-spacing: 0;
+    background: transparent;
+    border: 1px solid #475569 !important;
     border-color: #475569 !important;
 }
 
 body.public-page #editorjs .tc-table {
-    border: 1px solid #475569 !important;
     overflow: hidden;
 }
 
@@ -149,17 +180,23 @@ body.public-page #editorjs .tc-table .tc-row {
 body.public-page #editorjs .tc-table .tc-cell,
 body.public-page #editorjs table td,
 body.public-page #editorjs table th {
-    background: rgba(15, 23, 42, 0.2);
+    background: transparent;
     padding: 12px 14px;
     min-height: 52px;
     line-height: 1.5;
-    vertical-align: top;
+    vertical-align: middle;
+    text-align: left;
 }
 
 body.public-page #editorjs .tc-table .tc-cell {
+    display: block;
     flex: 1 1 0;
+    white-space: pre-wrap;
+    word-break: break-word;
     border-right: 1px solid #475569 !important;
     border-bottom: 1px solid #475569 !important;
+    border-left: none !important;
+    border-top: none !important;
 }
 
 body.public-page #editorjs .tc-table .tc-row .tc-cell:last-child {
@@ -172,8 +209,30 @@ body.public-page #editorjs .tc-table .tc-row:last-child .tc-cell {
 
 body.public-page #editorjs table td,
 body.public-page #editorjs table th {
-    border-color: #475569 !important;
+    border-right: 1px solid #475569 !important;
+    border-bottom: 1px solid #475569 !important;
+    border-left: none !important;
+    border-top: none !important;
+}
+
+body.public-page #editorjs table tr > td:last-child,
+body.public-page #editorjs table tr > th:last-child {
+    border-right: none !important;
+}
+
+body.public-page #editorjs table tr:last-child > td,
+body.public-page #editorjs table tr:last-child > th {
+    border-bottom: none !important;
 }
 
 .chat-link { color: var(--accent); font-weight: 700; }
 .chat-link:hover { text-decoration: underline; }
+
+.editor-radio-btn {
+    margin: 0 8px 0 0 !important;
+    vertical-align: middle;
+    cursor: pointer;
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent);
+}

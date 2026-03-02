@@ -1,5 +1,31 @@
 // assets/js/app.js
 let globalEditorInstance = null;
+document.addEventListener('keydown', function(e) {
+    if (e.shiftKey && e.key === 'Enter') {
+        const cell = e.target.closest('.tc-cell, .tc-table__cell, td, th');
+        if (cell) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const selection = window.getSelection();
+            if (!selection.rangeCount) return;
+            
+            const range = selection.getRangeAt(0);
+            const br = document.createElement('br');
+            // Een onzichtbaar spatie-teken helpt Firefox om de cursor correct te plaatsen
+            const textNode = document.createTextNode('\u200B'); 
+            
+            range.deleteContents();
+            range.insertNode(textNode);
+            range.insertNode(br);
+            
+            range.setStart(textNode, 0);
+            range.setEnd(textNode, 0);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+    }
+}, true); // 'true' zorgt dat we de toets stelen vóórdat EditorJS hem ziet
 
 function focusEditor() {
     if (globalEditorInstance) globalEditorInstance.focus();
@@ -138,15 +164,19 @@ createApp({
             const r = await fetch('api.php');
             const data = await r.json();
             this.items = data;
-            if (this.activePage) {
+            if (this.activePage && !this.needsSave) {
                 const updated = data.find(i => i.id === this.activePage.id);
                 if (updated) {
-                    const updatedCover = updated.draft_cover_image || updated.cover_image || '';
-                    const activeCover = this.activePage.draft_cover_image || this.activePage.cover_image || '';
-                    if (updated.title !== this.activePage.title || updated.is_public !== this.activePage.is_public || updatedCover !== activeCover) {
-                    this.activePage.title = updated.title;
+                    const useDraft = Number(updated.has_draft) === 1;
+                    const updatedTitle = useDraft ? (updated.draft_title || updated.title) : updated.title;
+                    const updatedCover = useDraft
+                        ? (updated.draft_cover_image || updated.cover_image || '')
+                        : (updated.cover_image || '');
+                    const activeCover = this.activePage.cover_image || '';
+                    if (updatedTitle !== this.activePage.title || updated.is_public !== this.activePage.is_public || updatedCover !== activeCover) {
+                    this.activePage.title = updatedTitle;
                     this.activePage.is_public = updated.is_public;
-                    this.activePage.cover_image = updated.cover_image || '';
+                    this.activePage.cover_image = updatedCover;
                     this.activePage.draft_cover_image = updated.draft_cover_image || '';
                     }
                 }
@@ -205,10 +235,16 @@ createApp({
         async selectDoc(page) {
             this.loading = true;
             this.activePage = { ...page };
+            const useDraft = Number(page.has_draft) === 1;
+            this.activePage.title = useDraft ? (page.draft_title || page.title) : page.title;
+            this.activePage.cover_image = useDraft
+                ? (page.draft_cover_image || page.cover_image || '')
+                : (page.cover_image || '');
+            this.activePage.draft_cover_image = page.draft_cover_image || '';
             this.lastSavedContent = page.draft_content || page.content;
-            this.lastSavedTitle = page.title;
+            this.lastSavedTitle = this.activePage.title;
             this.lastSavedPublic = page.is_public;
-            this.lastSavedCover = page.cover_image;
+            this.lastSavedCover = this.activePage.cover_image;
             this.lastSaveTime = null;
             this.needsSave = false;
 
@@ -272,6 +308,7 @@ createApp({
                         this.applyTableCellColorsFromData(initialData);
                         this.applyTableCellSizesFromData(initialData);
                         this.applyTableCellPaddingsFromData(initialData);
+                        this.applyTableCellInputStatesFromData(initialData);
                         this.normalizeRadioGroupsByCell();
                     },
                     onChange: () => {
@@ -285,11 +322,12 @@ createApp({
         async autoSave() {
             if (this.activePage && globalEditorInstance) {
                 try {
-                    const raw = await globalEditorInstance.save();
+                    const raw = await this.getEditorOutput();
                     const withTableColors = this.captureTableCellColors(raw);
                     const withTableSizes = this.captureTableCellSizes(withTableColors);
                     const withTablePaddings = this.captureTableCellPaddings(withTableSizes);
-                    const out = this.extractCellColors(withTablePaddings);
+                    const withTableInputs = this.captureTableCellInputStates(withTablePaddings);
+                    const out = this.extractCellColors(withTableInputs);
                     const str = JSON.stringify(out);
                     if (str !== this.lastSavedContent || this.activePage.title !== this.lastSavedTitle || this.activePage.is_public !== this.lastSavedPublic || this.activePage.cover_image !== this.lastSavedCover) {
                         await fetch('api.php', {
@@ -318,22 +356,28 @@ createApp({
             this.loading = true; 
             if (globalEditorInstance) {
                 try {
-                    const raw = await globalEditorInstance.save(); 
+                    const raw = await this.getEditorOutput(); 
                     const withTableColors = this.captureTableCellColors(raw);
                     const withTableSizes = this.captureTableCellSizes(withTableColors);
                     const withTablePaddings = this.captureTableCellPaddings(withTableSizes);
-                    const out = this.extractCellColors(withTablePaddings); 
+                    const withTableInputs = this.captureTableCellInputStates(withTablePaddings);
+                    const out = this.extractCellColors(withTableInputs); 
                     const str = JSON.stringify(out);
                     const publishCover = this.activePage.draft_cover_image || this.activePage.cover_image || '';
-                    await fetch('api.php', {
+                    const publishRes = await fetch('api.php', {
                         method: 'PUT',
                         body: JSON.stringify({ ...this.activePage, cover_image: publishCover, content: str, action: 'publish' })
                     });
+                    if (!publishRes.ok) {
+                        throw new Error(`Publish failed (${publishRes.status})`);
+                    }
                     this.activePage.cover_image = publishCover;
                     this.lastSavedContent = str; this.lastSavedTitle = this.activePage.title; this.lastSavedPublic = this.activePage.is_public; 
                     this.lastSavedCover = publishCover; this.lastSaveTime = this.getFormattedDateTime(); this.needsSave = false; this.activePage.has_draft = 0; 
                     this.showPublishNotice('Live page updated.');
-                } catch (e) { }
+                } catch (e) {
+                    this.showAlert('Publish Error', 'Publishing failed. Try again and check if Live is enabled.');
+                }
             }
             await this.fetchData(); 
             this.loading = false;
@@ -731,6 +775,49 @@ createApp({
                     }
                 });
             }
+            return data;
+        },
+        async getEditorOutput() {
+            const patchedCells = this.prepareTableCellsForSave();
+            try {
+                const raw = await globalEditorInstance.save();
+                return this.stripInvisibleCellMarkers(raw);
+            } finally {
+                this.restoreTableCellsAfterSave(patchedCells);
+            }
+        },
+        prepareTableCellsForSave() {
+            const cells = Array.from(document.querySelectorAll('#editorjs .tc-cell, #editorjs td, #editorjs th'));
+            const patched = [];
+            cells.forEach((cell) => {
+                const hasText = (cell.textContent || '').replace(/\u200B/g, '').trim().length > 0;
+                const hasInputs = cell.querySelector('.ld-table-checkbox, .ld-table-radio');
+                if (!hasText && !hasInputs) {
+                    cell.appendChild(document.createTextNode('\u200B'));
+                    patched.push(cell);
+                }
+            });
+            return patched;
+        },
+        restoreTableCellsAfterSave(patchedCells) {
+            (patchedCells || []).forEach((cell) => {
+                if (!cell) return;
+                cell.childNodes.forEach((node) => {
+                    if (node.nodeType === Node.TEXT_NODE && node.textContent === '\u200B') {
+                        node.textContent = '';
+                    }
+                });
+            });
+        },
+        stripInvisibleCellMarkers(data) {
+            if (!data || !Array.isArray(data.blocks)) return data;
+            data.blocks.forEach((block) => {
+                if (block.type !== 'table' || !block.data || !Array.isArray(block.data.content)) return;
+                block.data.content = block.data.content.map((row) => {
+                    if (!Array.isArray(row)) return row;
+                    return row.map((cell) => String(cell || '').replace(/\u200B/g, ''));
+                });
+            });
             return data;
         },
         bindTableCellColorPicker() {
@@ -1380,6 +1467,52 @@ createApp({
                 if (!block.data) block.data = {};
                 if (Object.keys(paddings).length > 0) block.data.cellPaddings = paddings;
                 else delete block.data.cellPaddings;
+            });
+            return data;
+        },
+        applyTableCellInputStatesFromData(data) {
+            if (!data || !Array.isArray(data.blocks)) return;
+            const tableBlocks = data.blocks.filter(b => b.type === 'table');
+            const domTables = Array.from(document.querySelectorAll('#editorjs .tc-table, #editorjs table'));
+            tableBlocks.forEach((block, tableIdx) => {
+                const tableEl = domTables[tableIdx];
+                if (!tableEl) return;
+                const rows = this.getTableRows(tableEl);
+                const inputStates = (block.data && block.data.cellInputStates) ? block.data.cellInputStates : {};
+                Object.keys(inputStates).forEach((key) => {
+                    const parts = key.split('-');
+                    const rIdx = Number(parts[0]);
+                    const cIdx = Number(parts[1]);
+                    if (!Number.isFinite(rIdx) || !Number.isFinite(cIdx)) return;
+                    const cell = rows[rIdx] && rows[rIdx][cIdx];
+                    if (!cell) return;
+                    const states = Array.isArray(inputStates[key]) ? inputStates[key] : [];
+                    const inputs = Array.from(cell.querySelectorAll('.ld-table-checkbox, .ld-table-radio'));
+                    inputs.forEach((input, i) => {
+                        input.checked = !!states[i];
+                    });
+                });
+            });
+        },
+        captureTableCellInputStates(data) {
+            if (!data || !Array.isArray(data.blocks)) return data;
+            const tableBlocks = data.blocks.filter(b => b.type === 'table');
+            const domTables = Array.from(document.querySelectorAll('#editorjs .tc-table, #editorjs table'));
+            tableBlocks.forEach((block, tableIdx) => {
+                const tableEl = domTables[tableIdx];
+                if (!tableEl) return;
+                const rows = this.getTableRows(tableEl);
+                const inputStates = {};
+                rows.forEach((cells, rIdx) => {
+                    cells.forEach((cell, cIdx) => {
+                        const inputs = Array.from(cell.querySelectorAll('.ld-table-checkbox, .ld-table-radio'));
+                        if (inputs.length === 0) return;
+                        inputStates[`${rIdx}-${cIdx}`] = inputs.map((input) => !!input.checked);
+                    });
+                });
+                if (!block.data) block.data = {};
+                if (Object.keys(inputStates).length > 0) block.data.cellInputStates = inputStates;
+                else delete block.data.cellInputStates;
             });
             return data;
         },

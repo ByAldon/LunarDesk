@@ -183,6 +183,22 @@ $metaText = implode(' ', $metaParts);
                     cell.style.padding = String(paddings[key]);
                 });
             };
+            const applyInputStates = (rows, block) => {
+                const inputStates = (block.data && block.data.cellInputStates) ? block.data.cellInputStates : {};
+                Object.keys(inputStates).forEach((key) => {
+                    const parts = key.split('-');
+                    const rIdx = Number(parts[0]);
+                    const cIdx = Number(parts[1]);
+                    if (!Number.isFinite(rIdx) || !Number.isFinite(cIdx)) return;
+                    const cell = rows[rIdx] && rows[rIdx][cIdx];
+                    if (!cell) return;
+                    const states = Array.isArray(inputStates[key]) ? inputStates[key] : [];
+                    const inputs = Array.from(cell.querySelectorAll('.ld-table-checkbox, .ld-table-radio'));
+                    inputs.forEach((input, i) => {
+                        input.checked = !!states[i];
+                    });
+                });
+            };
             tableBlocks.forEach((block, tableIdx) => {
                 const colorMap = (block.data && block.data.cellColors) ? block.data.cellColors : {};
                 const tableEl = domTables[tableIdx];
@@ -190,6 +206,7 @@ $metaText = implode(' ', $metaParts);
                 const rows = getRows(tableEl);
                 applySizes(rows, block);
                 applyPaddings(rows, block);
+                applyInputStates(rows, block);
                 rows.forEach((cells, rIdx) => {
                     cells.forEach((cell, cIdx) => {
                         const key = `${rIdx}-${cIdx}`;
