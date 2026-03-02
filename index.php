@@ -28,6 +28,7 @@ include 'version.php';
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/list@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/editorjs-text-color-plugin@2.0.4/dist/bundle.js"></script>
     <link rel="stylesheet" href="style.css">
+    <style>[v-cloak]{display:none!important;}</style>
 </head>
 <body class="bg-slate-900 h-screen overflow-hidden text-slate-300 selection:bg-blue-500/30">
     <div id="app" class="flex flex-col h-full w-full relative" v-cloak>
@@ -50,31 +51,34 @@ include 'version.php';
         <div class="flex-1 flex overflow-hidden w-full relative px-6 pb-6 gap-2">
             <aside class="bg-slate-800/80 border border-slate-700 shadow-2xl flex flex-col shrink-0 z-10 relative rounded-3xl overflow-hidden" :style="{ width: leftColWidth + 'px' }">
                 
-                <div class="h-1/3 min-h-[150px] flex flex-col shrink-0 border-b border-slate-700/50 bg-slate-900/20">
-                    <div class="p-6 flex justify-between items-center"><span class="font-black text-[10px] uppercase tracking-[0.2em] text-slate-400">Channels</span><button @click="createRoom" class="text-slate-400 hover:text-white transition-colors">+</button></div>
-                    <div class="flex-1 overflow-y-auto px-4 space-y-1 pb-4">
-                        <div v-for="room in rooms" :key="room.id" @click="selectRoom(room)" class="nav-item px-4 py-3 rounded-xl cursor-pointer text-sm flex justify-between items-center group transition-all" :class="activeRoom?.id === room.id ? 'bg-blue-600/20 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'">
-                            <div class="nav-indicator"></div>
-                            <span class="truncate"># {{ room.title }}</span>
-                            <button @click.stop="openSettings(room)" class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-white transition-opacity">⚙️</button>
+                <div class="flex items-center border-b border-slate-700/50 bg-slate-900/60 shrink-0">
+                    <button @click="switchTab('stream')" class="flex-1 py-4 px-4 text-[10px] font-black uppercase tracking-widest transition-colors relative flex justify-center items-center gap-2" :class="activeLeftTab === 'stream' ? 'text-blue-400 bg-slate-800/80 shadow-[inset_0_2px_0_0_#3b82f6]' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/40'">
+                        Stream
+                        <span v-if="hasUnreadStream" class="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-lg shadow-red-500/50"></span>
+                    </button>
+                    <div class="w-px h-6 bg-slate-700/50"></div>
+                    <button @click="switchTab('terminal')" class="flex-1 py-4 px-4 text-[10px] font-black uppercase tracking-widest transition-colors relative flex justify-center items-center gap-2" :class="activeLeftTab === 'terminal' ? 'text-amber-500 bg-slate-800/80 shadow-[inset_0_2px_0_0_#f59e0b]' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/40'">
+                        Terminal
+                        <span v-if="hasUnreadTerminal" class="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-lg shadow-red-500/50"></span>
+                    </button>
+                </div>
+
+                <div v-show="activeLeftTab === 'stream'" class="flex-1 flex flex-col overflow-hidden">
+                    
+                    <div class="flex flex-col shrink-0 border-b border-slate-700/50 bg-slate-900/20" :style="{ height: channelsHeight + 'px' }">
+                        <div class="p-6 flex justify-between items-center"><span class="font-black text-[10px] uppercase tracking-[0.2em] text-slate-400">Channels</span><button @click="createRoom" class="text-slate-400 hover:text-white transition-colors">+</button></div>
+                        <div class="flex-1 overflow-y-auto px-4 space-y-1 pb-4">
+                            <div v-for="room in rooms" :key="room.id" @click="selectRoom(room)" class="nav-item px-4 py-3 rounded-xl cursor-pointer text-sm flex justify-between items-center group transition-all" :class="activeRoom?.id === room.id ? 'bg-blue-600/20 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'">
+                                <div class="nav-indicator"></div>
+                                <span class="truncate"># {{ room.title }}</span>
+                                <button @click.stop="openSettings(room)" class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-white transition-opacity">⚙️</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-                
-                <div class="flex-1 flex flex-col overflow-hidden bg-slate-900/40">
-                    <div class="flex items-center border-b border-slate-700/50 bg-slate-800/80 shrink-0">
-                        <button @click="switchTab('stream')" class="flex-1 py-3 px-4 text-[10px] font-black uppercase tracking-widest transition-colors relative flex justify-center items-center gap-2" :class="activeLeftTab === 'stream' ? 'text-blue-400 bg-slate-900/50 shadow-inner' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/30'">
-                            Stream
-                            <span v-if="hasUnreadStream" class="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-lg shadow-red-500/50"></span>
-                        </button>
-                        <div class="w-px h-6 bg-slate-700/50"></div>
-                        <button @click="switchTab('terminal')" class="flex-1 py-3 px-4 text-[10px] font-black uppercase tracking-widest transition-colors relative flex justify-center items-center gap-2" :class="activeLeftTab === 'terminal' ? 'text-amber-500 bg-slate-900/50 shadow-inner' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/30'">
-                            Terminal
-                            <span v-if="hasUnreadTerminal" class="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-lg shadow-red-500/50"></span>
-                        </button>
-                    </div>
-
-                    <div v-show="activeLeftTab === 'stream'" class="flex-1 flex flex-col overflow-hidden relative">
+                    
+                    <div @mousedown="startDrag('channels', $event)" class="h-2 w-full bg-transparent hover:bg-blue-500/20 cursor-row-resize z-50 transition-colors shrink-0"></div>
+                    
+                    <div class="flex-1 flex flex-col overflow-hidden relative bg-slate-900/40">
                         <div class="absolute top-2 right-4 z-10">
                             <button v-if="activeRoom && roomMessages.length > 0" @click="confirmClearMessages" class="text-[9px] uppercase font-bold text-slate-400 hover:text-red-400 transition-colors bg-slate-800/80 px-2 py-1 rounded-lg border border-slate-700 backdrop-blur-sm">Wipe</button>
                         </div>
@@ -90,16 +94,16 @@ include 'version.php';
                             <div v-else-if="roomMessages.length === 0" class="text-center text-slate-600 text-[10px] uppercase font-bold mt-10 tracking-widest">No messages yet</div>
                         </div>
                     </div>
+                </div>
 
-                    <div v-show="activeLeftTab === 'terminal'" class="flex-1 flex flex-col overflow-hidden">
-                        <div class="flex-1 overflow-y-auto px-4 py-4 space-y-2" id="admin-chat">
-                            <div v-for="chat in adminMessages" :key="chat.id" class="text-xs leading-relaxed"><span :class="[chat.colorClass, 'font-black mr-2 uppercase tracking-tighter text-[10px]']">{{ chat.sender }}:</span><span class="text-slate-400" v-html="linkify(chat.content)"></span></div>
-                        </div>
-                        <div class="p-4 border-t border-slate-700/50 bg-slate-800/30">
-                            <form @submit.prevent="sendAdminMessage">
-                                <input v-model="newAdminMsg" type="text" placeholder="Enter command..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-5 py-3 text-xs text-white outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 font-mono transition-all placeholder-slate-500 shadow-inner">
-                            </form>
-                        </div>
+                <div v-show="activeLeftTab === 'terminal'" class="flex-1 flex flex-col overflow-hidden bg-slate-900/40">
+                    <div class="flex-1 overflow-y-auto px-4 py-4 space-y-2" id="admin-chat">
+                        <div v-for="chat in adminMessages" :key="chat.id" class="text-xs leading-relaxed"><span :class="[chat.colorClass, 'font-black mr-2 uppercase tracking-tighter text-[10px]']">{{ chat.sender }}:</span><span class="text-slate-400" v-html="linkify(chat.content)"></span></div>
+                    </div>
+                    <div class="p-4 border-t border-slate-700/50 bg-slate-800/30">
+                        <form @submit.prevent="sendAdminMessage">
+                            <input v-model="newAdminMsg" type="text" placeholder="Enter command..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-5 py-3 text-xs text-white outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 font-mono transition-all placeholder-slate-500 shadow-inner">
+                        </form>
                     </div>
                 </div>
 
@@ -115,7 +119,7 @@ include 'version.php';
                             <div class="flex justify-between items-center group mb-4 px-2">
                                 <span class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{{ space.title }}</span>
                                 <div class="hidden group-hover:flex items-center gap-2">
-                                    <button @click.stop="createItem('page', space.id)" class="text-slate-400 hover:text-blue-400 transition-colors">+</button>
+                                    <button @click.stop="createItem('page', space.id)" class="text-slate-400 hover:text-blue-400 transition-colors text-lg leading-none px-1">+</button>
                                     <button @click.stop="confirmDelete(space.id, 'space')" class="text-slate-400 hover:text-red-400 transition-colors">x</button>
                                 </div>
                             </div>
@@ -124,16 +128,31 @@ include 'version.php';
                                     <li @click="selectDoc(page)" class="nav-item group flex flex-col cursor-pointer">
                                         <div class="flex items-center justify-between pl-4 pr-3 py-2.5 rounded-xl transition-all" :class="activePage?.id == page.id ? 'bg-blue-600/20 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'">
                                             <div class="nav-indicator"></div>
-                                            <span class="truncate text-sm">{{ page.has_draft ? page.draft_title : page.title }}</span>
+                                            <div class="min-w-0 flex-1">
+                                                <span class="truncate text-sm block">{{ page.has_draft ? page.draft_title : page.title }}</span>
+                                                <span class="truncate text-[9px] block text-slate-500">{{ getItemMetaLabel(page) }}</span>
+                                            </div>
                                             <div class="flex items-center gap-2">
                                                 <span v-if="page.is_public == 1" class="text-[8px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-black uppercase">Live</span>
-                                                <button @click.stop="createItem('subpage', page.id)" class="hidden group-hover:block text-slate-400 hover:text-blue-400 text-xl font-light transition-colors">+</button>
+                                                <button @click.stop="moveItem(page, 'up', 'page', space.id)" class="hidden group-hover:block text-slate-400 hover:text-blue-400 text-base leading-none transition-colors px-1">↑</button>
+                                                <button @click.stop="moveItem(page, 'down', 'page', space.id)" class="hidden group-hover:block text-slate-400 hover:text-blue-400 text-base leading-none transition-colors px-1">↓</button>
+                                                <button @click.stop="createItem('subpage', page.id)" class="hidden group-hover:block text-slate-400 hover:text-blue-400 text-2xl font-light leading-none transition-colors px-1">+</button>
                                             </div>
                                         </div>
                                         <ul class="mt-2 ml-4 space-y-1 border-l border-slate-700 pl-2">
-                                            <li v-for="subpage in getSubpages(page.id)" :key="subpage.id" @click.stop="selectDoc(subpage)" class="nav-item pl-4 pr-3 py-2 rounded-xl text-xs transition-all flex items-center justify-between" :class="activePage?.id == subpage.id ? 'bg-blue-600/20 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'">
-                                                <div class="nav-indicator"></div>
-                                                <span class="truncate">{{ subpage.has_draft ? subpage.draft_title : subpage.title }}</span>
+                                            <li v-for="node in getNestedSubpages(page.id)" :key="node.item.id" @click.stop="selectDoc(node.item)" class="nav-item group pl-4 pr-3 py-2 rounded-xl text-xs transition-all flex items-center justify-between" :class="activePage?.id == node.item.id ? 'bg-blue-600/20 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'">
+                                                <div class="flex items-center min-w-0 gap-2" :style="{ marginLeft: (node.depth * 16) + 'px' }">
+                                                    <div class="nav-indicator"></div>
+                                                    <div class="min-w-0 flex-1">
+                                                        <span class="truncate block">{{ node.item.has_draft ? node.item.draft_title : node.item.title }}</span>
+                                                        <span class="truncate text-[9px] block text-slate-500">{{ getItemMetaLabel(node.item) }}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="hidden group-hover:flex items-center gap-1">
+                                                    <button @click.stop="moveItem(node.item, 'up', 'subpage', node.parentId)" class="text-slate-400 hover:text-blue-400 text-base leading-none transition-colors px-1">↑</button>
+                                                    <button @click.stop="moveItem(node.item, 'down', 'subpage', node.parentId)" class="text-slate-400 hover:text-blue-400 text-base leading-none transition-colors px-1">↓</button>
+                                                    <button @click.stop="createItem('subpage', node.item.id)" class="text-slate-400 hover:text-blue-400 text-lg leading-none transition-colors px-1">+</button>
+                                                </div>
                                             </li>
                                         </ul>
                                     </li>
@@ -167,7 +186,7 @@ include 'version.php';
                             <div class="flex items-center gap-6">
                                 <label class="flex items-center text-[10px] font-black uppercase text-slate-300 gap-3 cursor-pointer hover:text-white transition-colors">
                                     <span>Live</span>
-                                    <input type="checkbox" v-model="activePage.is_public" :true-value="1" :false-value="0" class="accent-blue-500 w-5 h-5 rounded-md cursor-pointer">
+                                    <input type="checkbox" v-model="activePage.is_public" @change="autoSave" :true-value="1" :false-value="0" class="accent-blue-500 w-5 h-5 rounded-md cursor-pointer">
                                 </label>
                                 <span v-if="lastSaveTime" class="text-blue-400 font-mono text-[10px] tracking-widest uppercase">Signal: {{ lastSaveTime }}</span>
                                 <span v-if="activePage.has_draft == 1" class="text-amber-500 font-black animate-pulse uppercase text-[10px] tracking-widest bg-amber-500/10 px-3 py-1 rounded-md">Unpublished</span>
@@ -190,6 +209,7 @@ include 'version.php';
                         </div>
 
                         <div class="p-12 px-20 max-w-5xl mx-auto w-full pb-32" @click.self="focusEditor">
+                            <p class="text-[10px] uppercase tracking-[0.18em] text-slate-500 mb-6">{{ getItemMetaLabel(activePage) }}</p>
                             <input v-model="activePage.title" placeholder="Untitled Page" class="text-5xl font-black bg-transparent text-white outline-none w-full mb-10 placeholder-slate-600 transition-all border-none focus:ring-0">
                             <div id="editorjs" class="w-full"></div>
                         </div>
@@ -230,7 +250,7 @@ include 'version.php';
                 <div class="bg-slate-800 border border-slate-700 p-12 rounded-3xl w-full max-w-6xl shadow-2xl flex flex-col max-h-[90vh]">
                     <div class="flex justify-between items-center mb-10">
                         <h2 class="text-4xl font-black text-white uppercase tracking-tighter">Access</h2>
-                        <button @click="showUsersModal = false" class="text-slate-500 hover:text-white transition-all duration-300 hover:rotate-90 p-2 text-xl font-bold outline-none">âœ•</button>
+                        <button @click="showUsersModal = false" class="text-slate-500 hover:text-white transition-all duration-300 hover:rotate-90 p-2 text-xl font-bold outline-none">&times;</button>
                     </div>
                     <div class="flex flex-col md:flex-row gap-12 overflow-hidden">
                         <div class="w-full md:w-96 bg-slate-900/50 border border-slate-700 p-8 rounded-2xl shadow-inner">
@@ -278,7 +298,7 @@ include 'version.php';
                 <div class="bg-slate-800 border border-slate-700 p-12 rounded-3xl w-full max-w-md shadow-2xl">
                     <div class="flex justify-between items-center mb-10">
                         <h2 class="text-3xl font-black text-white uppercase tracking-tighter">Your Profile</h2>
-                        <button @click="showProfileModal = false" class="text-slate-500 hover:text-white transition-all duration-300 hover:rotate-90 p-2 text-xl font-bold outline-none">âœ•</button>
+                        <button @click="showProfileModal = false" class="text-slate-500 hover:text-white transition-all duration-300 hover:rotate-90 p-2 text-xl font-bold outline-none">&times;</button>
                     </div>
                     <form @submit.prevent="updateProfile" class="space-y-6">
                         <div><label class="block text-[9px] font-black text-slate-400 uppercase mb-2 ml-1">Username</label><input v-model="profileForm.username" type="text" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-sm text-white outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all" required></div>
@@ -326,30 +346,12 @@ include 'version.php';
             <div class="bg-slate-800 border border-slate-700 rounded-3xl w-full max-w-5xl flex flex-col shadow-2xl overflow-hidden">
                 <div class="p-8 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
                     <h2 class="text-2xl font-black text-white uppercase tracking-tighter">Format Identity</h2>
-                    <button @click="cancelCrop" class="text-slate-500 hover:text-white transition-all duration-300 hover:rotate-90 p-2 text-xl font-bold outline-none">âœ•</button>
+                    <button @click="cancelCrop" class="text-slate-500 hover:text-white transition-all duration-300 hover:rotate-90 p-2 text-xl font-bold outline-none">&times;</button>
                 </div>
                 <div class="p-1 bg-black/50 flex justify-center items-center" style="height: 60vh;"><img id="cropImage" :src="cropImageSrc" class="max-w-full max-h-full block rounded-xl"></div>
                 <div class="p-8 border-t border-slate-700 flex justify-end gap-6 bg-slate-900/50">
                     <button @click="cancelCrop" class="text-slate-300 hover:text-white font-black uppercase tracking-widest py-2 px-6 transition-colors">Discard</button>
                     <button @click="applyCrop" class="bg-blue-600 hover:bg-blue-500 text-white px-12 py-4 rounded-xl text-xs font-black uppercase tracking-widest shadow-xl transition-all">Apply Changes</button>
-                </div>
-            </div>
-        </div>
-
-        <div v-if="showBetaNotice" class="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
-            <div class="bg-slate-800 border border-slate-700 p-12 rounded-3xl w-full max-w-2xl shadow-2xl relative text-center">
-                <h2 class="text-4xl font-black text-amber-500 mb-6 uppercase tracking-tighter tracking-[0.2em] drop-shadow-md">ðŸš§ SYSTEM IN BETA</h2>
-                <p class="text-sm text-slate-300 mb-8 leading-relaxed">Welcome to LunarDesk! This system is currently in its beta phase. This means that bugs or unexpected errors may still occur during development.</p>
-                <div class="bg-slate-900/50 p-8 border border-slate-700 rounded-2xl mb-10 text-left shadow-inner">
-                    <strong class="text-red-400 font-black uppercase text-[10px] tracking-widest block mb-4">âš ï¸ CRITICAL WARNING:</strong>
-                    <p class="text-xs text-slate-300 leading-relaxed uppercase font-bold mb-4">As long as this project is in beta, it is highly recommended not to use it for serious or critical work yet. Always maintain a local backup of your textual data.</p>
-                    <p class="text-xs text-slate-400 leading-relaxed uppercase">The database (data.db) structure may fail unexpectedly or be reset entirely during future updates. Use at your own discretion.</p>
-                </div>
-                <div class="flex flex-col items-center gap-6">
-                    <button @click="dismissBetaNotice" class="bg-blue-600 hover:bg-blue-500 text-white px-12 py-4 rounded-xl text-xs font-black uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95">I Understand</button>
-                    <label class="flex items-center gap-3 text-[10px] font-black uppercase text-slate-300 cursor-pointer hover:text-white transition-colors">
-                        <input type="checkbox" v-model="dismissBetaPermanently" class="accent-blue-500 w-5 h-5 rounded-md"> Never show again
-                    </label>
                 </div>
             </div>
         </div>

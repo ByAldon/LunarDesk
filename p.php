@@ -5,11 +5,48 @@ $dbPath = __DIR__ . '/data.db';
 $slug = $_GET['s'] ?? '';
 try {
     $db = new PDO("sqlite:$dbPath");
-    $stmt = $db->prepare("SELECT * FROM items WHERE slug = :s AND is_public = 1");
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    try { $db->exec("ALTER TABLE items ADD COLUMN created_at TEXT"); } catch (PDOException $e) {}
+    try { $db->exec("ALTER TABLE items ADD COLUMN updated_at TEXT"); } catch (PDOException $e) {}
+    try { $db->exec("ALTER TABLE items ADD COLUMN created_by INTEGER"); } catch (PDOException $e) {}
+    try { $db->exec("ALTER TABLE items ADD COLUMN updated_by INTEGER"); } catch (PDOException $e) {}
+
+    $stmt = $db->prepare("
+        SELECT 
+            i.*,
+            COALESCE(uc.nickname, uc.username) AS created_by_name,
+            COALESCE(uu.nickname, uu.username) AS updated_by_name
+        FROM items i
+        LEFT JOIN users uc ON uc.id = i.created_by
+        LEFT JOIN users uu ON uu.id = i.updated_by
+        WHERE i.slug = :s AND i.is_public = 1
+    ");
     $stmt->execute([':s' => $slug]); $page = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$page) die("Unauthorized.");
-    $items = $db->query("SELECT id, title, type, parent_id, slug, is_public FROM items")->fetchAll(PDO::FETCH_ASSOC);
+    $items = $db->query("SELECT id, title, type, parent_id, slug, is_public, sort_order FROM items ORDER BY sort_order ASC, id ASC")->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) { die("Offline"); }
+
+$createdAt = $page['created_at'] ?? '';
+$updatedAt = $page['updated_at'] ?? '';
+$createdBy = $page['created_by'] ?? null;
+$updatedBy = $page['updated_by'] ?? null;
+$changedByOtherUser = !empty($createdBy) && !empty($updatedBy) && (int)$createdBy !== (int)$updatedBy;
+$changedTime = !empty($createdAt) && !empty($updatedAt) && $createdAt !== $updatedAt;
+$wasUpdated = $changedByOtherUser || $changedTime;
+$metaLabel = $wasUpdated ? 'Updated' : 'Created';
+$metaDateRaw = $wasUpdated ? $updatedAt : $createdAt;
+$metaDate = '';
+if (!empty($metaDateRaw)) {
+    $ts = strtotime($metaDateRaw);
+    $metaDate = $ts ? date('M j, Y H:i', $ts) : $metaDateRaw;
+}
+$metaActor = $wasUpdated
+    ? ($page['updated_by_name'] ?: $page['created_by_name'] ?: 'Unknown')
+    : ($page['created_by_name'] ?: $page['updated_by_name'] ?: 'Unknown');
+$metaParts = [$metaLabel];
+if ($metaDate !== '') $metaParts[] = $metaDate;
+if (!empty($metaActor)) $metaParts[] = 'by ' . $metaActor;
+$metaText = implode(' ', $metaParts);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -82,7 +119,13 @@ try {
         </div>
     </aside>
     <main class="flex-1 h-full overflow-y-auto flex flex-col">
-        <header class="h-80 shrink-0 bg-slate-900 relative" <?php if($page['cover_image']) echo "style='background:url({$page['cover_image']}) center/cover'"; ?>><div class="absolute inset-0 bg-slate-950/40"></div><h1 class="absolute bottom-10 left-12 text-6xl font-black text-white drop-shadow-2xl"><?php echo $page['title']; ?></h1></header>
+        <header class="h-80 shrink-0 bg-slate-900 relative" <?php if($page['cover_image']) echo "style='background:url({$page['cover_image']}) center/cover'"; ?>>
+            <div class="absolute inset-0 bg-slate-950/40"></div>
+            <div class="absolute bottom-10 left-12">
+                <h1 class="text-6xl font-black text-white drop-shadow-2xl"><?php echo htmlspecialchars($page['title']); ?></h1>
+                <p class="mt-3 text-xs uppercase tracking-[0.18em] text-slate-300/90"><?php echo htmlspecialchars($metaText); ?></p>
+            </div>
+        </header>
         <div class="p-12 max-w-4xl mx-auto w-full"><div id="editorjs"></div></div>
     </main>
     <script>

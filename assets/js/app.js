@@ -28,9 +28,11 @@ createApp({
             hasUnreadTerminal: false,
             newAdminMsg: '',
             adminHeight: 250,
+            channelsHeight: 250,
             leftColWidth: 320,  
             midColWidth: 280,   
-            dragTarget: null,   
+            dragTarget: null,
+            lastDragY: null,
             showSettingsModal: false,
             settingsRoom: null,
             showPromptModal: false,
@@ -46,23 +48,19 @@ createApp({
             showCropModal: false,
             cropImageSrc: null,
             cropper: null,
-            showBetaNotice: false,
-            dismissBetaPermanently: false,
             alertDialog: { show: false, title: '', message: '' },
             confirmDialog: { show: false, title: '', message: '', onConfirm: null }
         }
     },
     async created() {
-        const hideBeta = localStorage.getItem('hideBetaNotice');
-        if (!hideBeta) this.showBetaNotice = true;
         await this.fetchUser();
         await this.fetchData();
         await this.fetchRooms();
         await this.fetchAdminMessages();
         
-        setInterval(this.fetchData, 10000); 
-        setInterval(this.fetchRooms, 3000); 
-        setInterval(this.fetchAdminMessages, 3000); 
+        setInterval(() => this.fetchData(), 10000);
+        setInterval(() => this.fetchRooms(), 3000);
+        setInterval(() => this.fetchAdminMessages(), 3000);
 
         window.addEventListener('mousemove', this.doDrag);
         window.addEventListener('mouseup', this.stopDrag);
@@ -94,10 +92,15 @@ createApp({
             this.items = data;
             if (this.activePage) {
                 const updated = data.find(i => i.id === this.activePage.id);
-                if (updated && (updated.title !== this.activePage.title || updated.is_public !== this.activePage.is_public || updated.cover_image !== this.activePage.cover_image)) {
+                if (updated) {
+                    const updatedCover = updated.draft_cover_image || updated.cover_image || '';
+                    const activeCover = this.activePage.draft_cover_image || this.activePage.cover_image || '';
+                    if (updated.title !== this.activePage.title || updated.is_public !== this.activePage.is_public || updatedCover !== activeCover) {
                     this.activePage.title = updated.title;
                     this.activePage.is_public = updated.is_public;
-                    this.activePage.cover_image = updated.cover_image;
+                    this.activePage.cover_image = updated.cover_image || '';
+                    this.activePage.draft_cover_image = updated.draft_cover_image || '';
+                    }
                 }
             }
         },
@@ -129,7 +132,8 @@ createApp({
         },
         async fetchAdminMessages() {
             try {
-                const res = await fetch('api.php?action=admin_terminal');
+                const res = await fetch(`api.php?action=admin_terminal&t=${Date.now()}`, { cache: 'no-store' });
+                if (!res.ok) return;
                 const data = await res.json();
                 const oldLen = this.adminMessages ? this.adminMessages.length : 0;
                 this.adminMessages = data;
@@ -238,9 +242,14 @@ createApp({
                     const raw = await globalEditorInstance.save(); 
                     const out = this.extractCellColors(raw); 
                     const str = JSON.stringify(out);
-                    await fetch('api.php', { method: 'PUT', body: JSON.stringify({ ...this.activePage, content: str, action: 'publish' }) });
+                    const publishCover = this.activePage.draft_cover_image || this.activePage.cover_image || '';
+                    await fetch('api.php', {
+                        method: 'PUT',
+                        body: JSON.stringify({ ...this.activePage, cover_image: publishCover, content: str, action: 'publish' })
+                    });
+                    this.activePage.cover_image = publishCover;
                     this.lastSavedContent = str; this.lastSavedTitle = this.activePage.title; this.lastSavedPublic = this.activePage.is_public; 
-                    this.lastSavedCover = this.activePage.cover_image; this.lastSaveTime = this.getFormattedDateTime(); this.needsSave = false; this.activePage.has_draft = 0; 
+                    this.lastSavedCover = publishCover; this.lastSaveTime = this.getFormattedDateTime(); this.needsSave = false; this.activePage.has_draft = 0; 
                     this.showAlert("Signal Active", "Live view updated.");
                 } catch (e) { }
             }
@@ -282,10 +291,79 @@ createApp({
             });
         },
         getPages(spaceId) {
-            return this.items.filter(i => i.type === 'page' && i.parent_id === spaceId);
+            return this.items
+                .filter(i => i.type === 'page' && i.parent_id === spaceId)
+                .sort((a, b) => {
+                    const ao = Number.isFinite(Number(a.sort_order)) ? Number(a.sort_order) : 0;
+                    const bo = Number.isFinite(Number(b.sort_order)) ? Number(b.sort_order) : 0;
+                    return ao - bo || a.id - b.id;
+                });
         },
         getSubpages(pageId) {
-            return this.items.filter(i => i.type === 'subpage' && i.parent_id === pageId);
+            return this.items
+                .filter(i => i.type === 'subpage' && i.parent_id === pageId)
+                .sort((a, b) => {
+                    const ao = Number.isFinite(Number(a.sort_order)) ? Number(a.sort_order) : 0;
+                    const bo = Number.isFinite(Number(b.sort_order)) ? Number(b.sort_order) : 0;
+                    return ao - bo || a.id - b.id;
+                });
+        },
+        getNestedSubpages(rootId) {
+            const out = [];
+            const visited = new Set();
+            const walk = (parentId, depth) => {
+                const children = this.getSubpages(parentId);
+                children.forEach(child => {
+                    if (visited.has(child.id)) return;
+                    visited.add(child.id);
+                    out.push({ item: child, depth, parentId });
+                    walk(child.id, depth + 1);
+                });
+            };
+            walk(rootId, 0);
+            return out;
+        },
+        async saveOrder(reorderedArray) {
+            const payload = reorderedArray.map(item => ({
+                id: item.id,
+                sort_order: item.sort_order
+            }));
+
+            try {
+                await fetch('api.php?action=reorder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        },
+        async moveItem(item, direction, listType, parentId) {
+            const expectedType = listType === 'subpage' ? 'subpage' : 'page';
+            if (item.type !== expectedType || item.parent_id !== parentId) return;
+
+            const currentList = expectedType === 'page'
+                ? this.getPages(parentId)
+                : this.getSubpages(parentId);
+
+            const currentIndex = currentList.findIndex(i => i.id === item.id);
+            if (currentIndex === -1) return;
+
+            const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+            if (targetIndex < 0 || targetIndex >= currentList.length) return;
+
+            const reordered = [...currentList];
+            const [moved] = reordered.splice(currentIndex, 1);
+            reordered.splice(targetIndex, 0, moved);
+
+            reordered.forEach((entry, idx) => {
+                entry.sort_order = idx;
+                const globalItem = this.items.find(i => i.id === entry.id);
+                if (globalItem) globalItem.sort_order = idx;
+            });
+
+            await this.saveOrder(reordered);
         },
         createItem(type, parentId = null) {
             const label = type === 'space' ? "Partition Name" : "Node Name";
@@ -369,6 +447,31 @@ createApp({
             const urlPattern = /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
             return text.replace(urlPattern, '<a href="$1" target="_blank" class="text-blue-400 hover:underline">$1</a>');
         },
+        formatItemDate(dateValue) {
+            if (!dateValue) return '';
+            const normalized = typeof dateValue === 'string' ? dateValue.replace(' ', 'T') : dateValue;
+            const dt = new Date(normalized);
+            if (Number.isNaN(dt.getTime())) return String(dateValue);
+            return dt.toLocaleString();
+        },
+        getItemMetaLabel(item) {
+            if (!item) return '';
+            const hasCreated = !!item.created_at;
+            const hasUpdated = !!item.updated_at;
+            const changedByOtherUser = !!item.updated_by && !!item.created_by && Number(item.updated_by) !== Number(item.created_by);
+            const changedTime = hasCreated && hasUpdated && item.updated_at !== item.created_at;
+            const wasUpdated = changedByOtherUser || changedTime;
+            const label = wasUpdated ? 'Updated' : 'Created';
+            const rawDate = wasUpdated ? item.updated_at : item.created_at;
+            const dateText = this.formatItemDate(rawDate);
+            const actor = wasUpdated
+                ? (item.updated_by_name || item.created_by_name || 'Unknown')
+                : (item.created_by_name || item.updated_by_name || 'Unknown');
+            const parts = [label];
+            if (dateText) parts.push(dateText);
+            if (actor) parts.push(`by ${actor}`);
+            return parts.join(' ');
+        },
         hasCover(page) {
             return !!(page.cover_image || page.draft_cover_image);
         },
@@ -402,6 +505,7 @@ createApp({
             const canvas = this.cropper.getCroppedCanvas({ width: 1500 });
             const base64 = canvas.toDataURL('image/jpeg', 0.8);
             this.activePage.cover_image = base64;
+            this.activePage.draft_cover_image = base64;
             this.showCropModal = false;
             this.cropper.destroy();
             this.cropper = null;
@@ -458,7 +562,13 @@ createApp({
                 this.openUsersModal();
             });
         },
-        startDrag(target) { this.dragTarget = target; },
+        startDrag(target, e = null) {
+            this.dragTarget = target;
+            if (target === 'channels') {
+                if (e) e.preventDefault();
+                this.lastDragY = e ? e.clientY : null;
+            }
+        },
         doDrag(e) {
             if (!this.dragTarget) return;
             if (this.dragTarget === 'leftCol') {
@@ -470,9 +580,17 @@ createApp({
                 const aside = document.querySelector('aside');
                 const asideRect = aside.getBoundingClientRect();
                 this.adminHeight = asideRect.bottom - e.clientY;
+            } else if (this.dragTarget === 'channels') {
+                const deltaY = this.lastDragY === null ? e.movementY : (e.clientY - this.lastDragY);
+                this.channelsHeight += deltaY;
+                if (this.channelsHeight < 100) this.channelsHeight = 100;
+                this.lastDragY = e.clientY;
             }
         },
-        stopDrag() { this.dragTarget = null; },
+        stopDrag() {
+            this.dragTarget = null;
+            this.lastDragY = null;
+        },
         getFormattedDateTime() {
             return new Date().toLocaleTimeString();
         },
@@ -518,10 +636,6 @@ createApp({
         submitPrompt() {
             if (this.promptAction) this.promptAction(this.promptInput);
             this.showPromptModal = false;
-        },
-        dismissBetaNotice() {
-            if (this.dismissBetaPermanently) localStorage.setItem('hideBetaNotice', 'true');
-            this.showBetaNotice = false;
         }
     },
     computed: {

@@ -2,6 +2,9 @@
 // api.php
 session_start();
 header('Content-Type: application/json');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
 
 if (empty($_SESSION['logged_in'])) {
     http_response_code(401);
@@ -15,6 +18,31 @@ include 'version.php';
 try {
     $db = new PDO("sqlite:$dbPath");
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    try {
+        $db->exec("ALTER TABLE items ADD COLUMN sort_order INTEGER DEFAULT 0");
+    } catch (PDOException $e) {
+        // Silent: column already exists or table not ready yet.
+    }
+    try {
+        $db->exec("ALTER TABLE items ADD COLUMN created_at TEXT");
+    } catch (PDOException $e) {
+        // Silent: column already exists or table not ready yet.
+    }
+    try {
+        $db->exec("ALTER TABLE items ADD COLUMN updated_at TEXT");
+    } catch (PDOException $e) {
+        // Silent: column already exists or table not ready yet.
+    }
+    try {
+        $db->exec("ALTER TABLE items ADD COLUMN created_by INTEGER");
+    } catch (PDOException $e) {
+        // Silent: column already exists or table not ready yet.
+    }
+    try {
+        $db->exec("ALTER TABLE items ADD COLUMN updated_by INTEGER");
+    } catch (PDOException $e) {
+        // Silent: column already exists or table not ready yet.
+    }
 
     $method = $_SERVER['REQUEST_METHOD'];
     $action = $_GET['action'] ?? '';
@@ -217,24 +245,95 @@ try {
         exit;
     }
 
+    if ($action === 'reorder') {
+        if ($method === 'POST') {
+            $reorderedItems = is_array($input) ? $input : [];
+            $stmt = $db->prepare("UPDATE items SET sort_order = ? WHERE id = ?");
+            foreach ($reorderedItems as $item) {
+                if (!isset($item['id'], $item['sort_order'])) {
+                    continue;
+                }
+                $stmt->execute([(int)$item['sort_order'], (int)$item['id']]);
+            }
+            echo json_encode(['success' => true]);
+        } else {
+            http_response_code(405);
+            echo json_encode(['error' => 'Method not allowed']);
+        }
+        exit;
+    }
+
     // --- SPACES & PAGES (DEFAULT CRUD) ---
     switch ($method) {
         case 'GET':
-            echo json_encode($db->query("SELECT * FROM items ORDER BY type DESC, title ASC")->fetchAll(PDO::FETCH_ASSOC));
+            echo json_encode($db->query("
+                SELECT 
+                    i.*,
+                    COALESCE(uc.nickname, uc.username) AS created_by_name,
+                    COALESCE(uu.nickname, uu.username) AS updated_by_name
+                FROM items i
+                LEFT JOIN users uc ON uc.id = i.created_by
+                LEFT JOIN users uu ON uu.id = i.updated_by
+                ORDER BY i.sort_order ASC, i.id ASC
+            ")->fetchAll(PDO::FETCH_ASSOC));
             break;
         case 'POST':
             $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $input['title']))) . '-' . rand(100, 999);
-            $db->prepare("INSERT INTO items (title, draft_title, type, parent_id, slug) VALUES (?, ?, ?, ?, ?)")
-               ->execute([$input['title'], $input['title'], $input['type'], $input['parent_id'], $slug]);
+            $db->prepare("
+                INSERT INTO items (title, draft_title, type, parent_id, slug, created_at, updated_at, created_by, updated_by)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)
+            ")->execute([$input['title'], $input['title'], $input['type'], $input['parent_id'], $slug, $_SESSION['user_id'], $_SESSION['user_id']]);
             echo json_encode(['success' => true]);
             break;
         case 'PUT':
-            if ($input['action'] === 'publish') {
-                $stmt = $db->prepare("UPDATE items SET title = :t, content = :c, cover_image = :cov, has_draft = 0, is_public = :p WHERE id = :id");
-            } else {
-                $stmt = $db->prepare("UPDATE items SET draft_title = :t, draft_content = :c, draft_cover_image = :cov, has_draft = 1, is_public = :p WHERE id = :id");
+            $existingStmt = $db->prepare("SELECT * FROM items WHERE id = ?");
+            $existingStmt->execute([$input['id']]);
+            $existing = $existingStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$existing) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Item not found']);
+                break;
             }
-            $stmt->execute([':t'=>$input['title'], ':c'=>$input['content'], ':p'=>$input['is_public'], ':id'=>$input['id'], ':cov'=>$input['cover_image'] ?? '']);
+
+            $newTitle = $input['title'] ?? '';
+            $newContent = $input['content'] ?? '';
+            $newPublic = isset($input['is_public']) ? (int)$input['is_public'] : 0;
+            $newCover = $input['cover_image'] ?? '';
+            $actionType = $input['action'] ?? 'draft';
+
+            if ($actionType === 'publish') {
+                $hasChanges =
+                    (string)($existing['title'] ?? '') !== (string)$newTitle ||
+                    (string)($existing['content'] ?? '') !== (string)$newContent ||
+                    (string)($existing['cover_image'] ?? '') !== (string)$newCover ||
+                    (int)($existing['is_public'] ?? 0) !== $newPublic ||
+                    (int)($existing['has_draft'] ?? 0) !== 0;
+
+                if ($hasChanges) {
+                    $stmt = $db->prepare("UPDATE items SET title = :t, content = :c, cover_image = :cov, has_draft = 0, is_public = :p, updated_at = CURRENT_TIMESTAMP, updated_by = :uid WHERE id = :id");
+                } else {
+                    $stmt = $db->prepare("UPDATE items SET title = :t, content = :c, cover_image = :cov, has_draft = 0, is_public = :p WHERE id = :id");
+                }
+            } else {
+                $hasChanges =
+                    (string)($existing['draft_title'] ?? '') !== (string)$newTitle ||
+                    (string)($existing['draft_content'] ?? '') !== (string)$newContent ||
+                    (string)($existing['draft_cover_image'] ?? '') !== (string)$newCover ||
+                    (int)($existing['is_public'] ?? 0) !== $newPublic ||
+                    (int)($existing['has_draft'] ?? 0) !== 1;
+
+                if ($hasChanges) {
+                    $stmt = $db->prepare("UPDATE items SET draft_title = :t, draft_content = :c, draft_cover_image = :cov, has_draft = 1, is_public = :p, updated_at = CURRENT_TIMESTAMP, updated_by = :uid WHERE id = :id");
+                } else {
+                    $stmt = $db->prepare("UPDATE items SET draft_title = :t, draft_content = :c, draft_cover_image = :cov, has_draft = 1, is_public = :p WHERE id = :id");
+                }
+            }
+
+            $params = [':t'=>$newTitle, ':c'=>$newContent, ':p'=>$newPublic, ':id'=>$input['id'], ':cov'=>$newCover];
+            if ($hasChanges) {
+                $params[':uid'] = $_SESSION['user_id'];
+            }
+            $stmt->execute($params);
             echo json_encode(['success' => true]);
             break;
         case 'DELETE':
