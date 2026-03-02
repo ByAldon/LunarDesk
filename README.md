@@ -2,8 +2,6 @@
 
 LunarDesk is a lightweight, self-hosted workspace for writing docs, publishing selected pages, and receiving webhook messages in a built-in stream.
 
-Current app version: `v2.3.9`
-
 ## What It Does
 
 - Organize content in a hierarchy: `spaces -> pages -> subpages`.
@@ -154,4 +152,3 @@ Accepted payload shape:
 Issues and feature requests:
 
 `https://github.com/ByAldon/LunarDesk/issues`
-
