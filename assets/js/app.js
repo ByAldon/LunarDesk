@@ -23,6 +23,9 @@ createApp({
             activeRoom: null,
             roomMessages: [],
             adminMessages: [], 
+            activeLeftTab: 'stream',
+            hasUnreadStream: false,
+            hasUnreadTerminal: false,
             newAdminMsg: '',
             adminHeight: 250,
             leftColWidth: 320,  
@@ -65,6 +68,22 @@ createApp({
         window.addEventListener('mouseup', this.stopDrag);
     },
     methods: {
+        switchTab(tab) {
+            this.activeLeftTab = tab;
+            if (tab === 'stream') {
+                this.hasUnreadStream = false;
+                this.$nextTick(() => {
+                    const el = document.getElementById('webhook-stream');
+                    if (el) el.scrollTop = el.scrollHeight;
+                });
+            } else if (tab === 'terminal') {
+                this.hasUnreadTerminal = false;
+                this.$nextTick(() => {
+                    const el = document.getElementById('admin-chat');
+                    if (el) el.scrollTop = el.scrollHeight;
+                });
+            }
+        },
         async fetchUser() {
             const r = await fetch('api.php?action=profile');
             if (r.ok) this.currentUser = await r.json();
@@ -86,28 +105,46 @@ createApp({
             const r = await fetch('api.php?action=rooms');
             this.rooms = await r.json();
             if (this.activeRoom) {
-                const r2 = await fetch(`api.php?action=messages&room_id=${this.activeRoom.id}`);
-                this.roomMessages = await r2.json();
+                await this.fetchMessages(this.activeRoom.id);
             }
+        },
+        async fetchMessages(roomId) {
+            try {
+                const res = await fetch(`api.php?action=messages&room_id=${roomId}`);
+                const data = await res.json();
+                const oldLen = this.roomMessages ? this.roomMessages.length : 0;
+                this.roomMessages = data;
+
+                if (data.length > oldLen && oldLen > 0 && this.activeLeftTab !== 'stream') {
+                    this.hasUnreadStream = true;
+                }
+
+                if (this.activeLeftTab === 'stream') {
+                    this.$nextTick(() => {
+                        const el = document.getElementById('webhook-stream');
+                        if (el) el.scrollTop = el.scrollHeight;
+                    });
+                }
+            } catch (e) { console.error(e); }
         },
         async fetchAdminMessages() {
             try {
-                const r = await fetch('api.php?action=admin_terminal');
-                const data = await r.json();
-                
-                const sysMsg = { id: 'sys-1', sender: "System", content: "Terminal Operational. Signals Syncing.", colorClass: "text-blue-400" };
-                
-                const currentLast = this.adminMessages.length > 1 ? this.adminMessages[this.adminMessages.length - 1].id : null;
-                const newLast = data.length > 0 ? data[data.length - 1].id : null;
-                
-                if (this.adminMessages.length === 0 || currentLast !== newLast) {
-                    this.adminMessages = [sysMsg, ...data];
+                const res = await fetch('api.php?action=admin_terminal');
+                const data = await res.json();
+                const oldLen = this.adminMessages ? this.adminMessages.length : 0;
+                this.adminMessages = data;
+
+                if (data.length > oldLen && oldLen > 0 && this.activeLeftTab !== 'terminal') {
+                    this.hasUnreadTerminal = true;
+                }
+
+                if (this.activeLeftTab === 'terminal') {
                     this.$nextTick(() => {
                         const el = document.getElementById('admin-chat');
                         if (el) el.scrollTop = el.scrollHeight;
                     });
                 }
-            } catch(e) {}
+            } catch (e) { console.error(e); }
         },
         selectRoom(room) {
             this.activeRoom = room;
