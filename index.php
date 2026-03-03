@@ -348,6 +348,7 @@ include 'version.php';
                                 <a href="#manual-7" class="text-blue-300 hover:text-blue-200 transition-colors">7. Manual Multi-Cell Merge</a>
                                 <a href="#manual-8" class="text-blue-300 hover:text-blue-200 transition-colors">8. Keyboard Shortcuts</a>
                                 <a href="#manual-9" class="text-blue-300 hover:text-blue-200 transition-colors">9. Stream, Terminal and Admin Utilities</a>
+                                <a href="#manual-10" class="text-blue-300 hover:text-blue-200 transition-colors">10. Update Check and Content Recovery</a>
                             </div>
                         </section>
 
@@ -421,6 +422,14 @@ include 'version.php';
                         <section id="manual-9">
                             <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">9. Stream, Terminal and Admin Utilities</h3>
                             <p><strong>Stream</strong> shows channel messages and webhook output. <strong>Terminal</strong> is an admin command/message stream. Admin actions include room settings, webhook generation, message cleanup, and user access management.</p>
+                        </section>
+
+                        <section id="manual-10">
+                            <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">10. Update Check and Content Recovery</h3>
+                            <p>After an update, it is possible that existing content does not render correctly in some pages. Always check your important pages manually after updating.</p>
+                            <p class="mt-2">If content is broken after an update, verify the page state and recreate the affected content manually.</p>
+                            <p class="mt-2"><strong>Admin note:</strong> In most cases, deleting the database file is not required. If problems continue, check carefully first. Only if it is truly necessary, remove the database file so the system can create a new one.</p>
+                            <p class="mt-2 text-slate-400">This maintenance information is intended for administrators and is generally not needed for regular users.</p>
                         </section>
                     </div>
 
