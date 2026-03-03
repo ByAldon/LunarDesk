@@ -152,6 +152,51 @@ createApp({
         },
         getUpdateNotesForVersion(version) {
             const notesByVersion = {
+                'v2.9.7.16': [
+                    'Numeric table actions now open a dedicated mini adjust menu.',
+                    'Row height, column width, cell padding and border width support +/- plus manual number input.',
+                    'Improved table sizing workflow from the right-click menu.'
+                ],
+                'v2.9.7.15': [
+                    'Fixed native row-menu action handling so row color action is clickable reliably.',
+                    'Added row color HEX input action for quick precise row coloring.',
+                    'Improved native table menu behavior consistency.'
+                ],
+                'v2.9.7.14': [
+                    'Native table menu actions are now split by menu type.',
+                    'Row menu shows only row-related actions.',
+                    'Column menu shows only column-related actions.'
+                ],
+                'v2.9.7.13': [
+                    'Added table action: Duplicate row.',
+                    'Duplicate row is now available in table menus and slash commands.',
+                    'Table structure editing is faster for repeated row layouts.'
+                ],
+                'v2.9.7.12': [
+                    'Native table 4-dots menu now includes: Row background color...',
+                    'You can now color an entire row (left to right) in one action.',
+                    'Adjusted table menu wording and behavior for row-first coloring.'
+                ],
+                'v2.9.7.11': [
+                    'Native table 4-dots menu now includes: Column background color...',
+                    'You can now color an entire table column in one action from that menu.',
+                    'Small table workflow improvement for faster formatting.'
+                ],
+                'v2.9.7.10': [
+                    'Table right-click menu actions are now sorted alphabetically.',
+                    'Improved action scanability in long context menus.',
+                    'Minor menu usability cleanup.'
+                ],
+                'v2.9.7.9': [
+                    'Fixed native table menu injection targeting to avoid rendering actions in page content.',
+                    'Added cleanup for stale custom native-menu entries from previous faulty injections.',
+                    'Improved stability of custom actions inside the table 4-dots popup.'
+                ],
+                'v2.9.7.8': [
+                    'Fixed duplicate entries in the native table 4-dots menu.',
+                    'Native menu actions are now injected once per open menu, without stacking.',
+                    'Stability improvements for custom table menu integration.'
+                ],
                 'v2.9.7.7': [
                     'Table right-click menu is now larger for easier reading and clicking.',
                     'Added a small search field at the top of the table right-click menu.',
@@ -1192,6 +1237,12 @@ async fetchMessages(roomId) {
                     run: (cell) => this.duplicateTableColumn(cell)
                 },
                 {
+                    id: 'duplicate-row',
+                    label: 'duplicate row',
+                    hint: 'Duplicate current row below',
+                    run: (cell) => this.duplicateTableRow(cell)
+                },
+                {
                     id: 'move-row-up',
                     label: 'move row up',
                     hint: 'Move current row one step up',
@@ -1439,65 +1490,110 @@ async fetchMessages(roomId) {
             const active = this.getEditorTableCellFromTarget(document.activeElement);
             return active || null;
         },
-        isNativeTableDotsMenu(menuEl) {
-            if (!menuEl || !menuEl.textContent) return false;
-            const text = String(menuEl.textContent).toLowerCase();
-            return text.includes('add row above') && text.includes('add row below') && text.includes('delete row');
+        getNativeTableMenuType(menuEl) {
+            if (!menuEl || !menuEl.textContent || !menuEl.querySelectorAll) return null;
+            const cls = String(menuEl.className || '').toLowerCase();
+            if (!cls.includes('popover')) return null;
+            const actions = this.getNativeMenuActionNodes(menuEl);
+            if (actions.length < 3 || actions.length > 20) return null;
+            const labels = actions.map((el) => String(el.textContent || '').trim().toLowerCase());
+            const isRowMenu = labels.some((t) => t.includes('add row above'))
+                && labels.some((t) => t.includes('add row below'))
+                && labels.some((t) => t.includes('delete row'));
+            const isColumnMenu = labels.some((t) => t.includes('add column left'))
+                && labels.some((t) => t.includes('add column right'))
+                && labels.some((t) => t.includes('delete column'));
+            if (isRowMenu) return 'row';
+            if (isColumnMenu) return 'column';
+            return null;
         },
         getNativeMenuActionNodes(menuEl) {
             if (!menuEl) return [];
-            const candidates = Array.from(menuEl.querySelectorAll('button, [role="button"], .ce-popover-item, .tc-popover__item, li'));
+            const candidates = Array.from(menuEl.querySelectorAll(':scope > button, :scope > [role="button"], :scope > .ce-popover-item, :scope > .tc-popover__item, :scope > li'));
             return candidates.filter((el) => {
                 const t = String(el.textContent || '').trim().toLowerCase();
-                return t.length > 0;
+                if (!t) return false;
+                const cls = String(el.className || '').toLowerCase();
+                const role = String(el.getAttribute && el.getAttribute('role') || '').toLowerCase();
+                const tag = String(el.tagName || '').toLowerCase();
+                return tag === 'button' || role === 'button' || cls.includes('popover') || tag === 'li';
             });
         },
-        addNativeTableMenuAction(menuEl, label, onRun) {
-            const actions = this.getNativeMenuActionNodes(menuEl);
-            const template = actions[0] || null;
-            let item = null;
+        addNativeTableMenuAction(menuEl, actionId, label, onRun) {
+            const existing = menuEl.querySelector(`[data-ld-native-table-action-id="${actionId}"]`);
+            if (existing) return;
+
+            const template = this.getNativeMenuActionNodes(menuEl)[0] || null;
+            const tag = template && template.tagName ? template.tagName.toLowerCase() : 'button';
+            const item = document.createElement(tag);
+            if (tag === 'button') item.type = 'button';
+            item.setAttribute('data-ld-native-table-action', '1');
+            item.setAttribute('data-ld-native-table-action-id', actionId);
             if (template) {
-                item = template.cloneNode(true);
-                item.removeAttribute('disabled');
-                item.setAttribute('data-ld-native-table-action', '1');
-                const titleEl = item.querySelector('.ce-popover-item__title, .tc-popover__item-label, [class*="title"], [class*="label"]');
-                if (titleEl) titleEl.textContent = label;
-                else item.textContent = label;
+                item.className = template.className || '';
+                const role = template.getAttribute('role');
+                if (role) item.setAttribute('role', role);
             } else {
-                item = document.createElement('button');
-                item.type = 'button';
-                item.textContent = label;
-                item.style.display = 'block';
-                item.style.width = '100%';
-                item.style.textAlign = 'left';
+                item.className = 'ce-popover-item';
             }
-            item.addEventListener('click', (event) => {
+
+            const icon = document.createElement('span');
+            icon.className = 'ce-popover-item__icon';
+            icon.textContent = '↗';
+            icon.style.marginRight = '8px';
+
+            const title = document.createElement('span');
+            title.className = 'ce-popover-item__title';
+            title.textContent = label;
+
+            item.appendChild(icon);
+            item.appendChild(title);
+            const runAction = (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 const cell = this.getActiveTableCell();
                 if (!cell) return;
                 onRun(cell);
-            });
+            };
+            item.addEventListener('mousedown', runAction);
+            item.addEventListener('click', runAction);
             menuEl.appendChild(item);
         },
+        removeStaleNativeTableActions() {
+            const stale = document.querySelectorAll('[data-ld-native-table-action="1"]');
+            stale.forEach((el) => {
+                const hostMenu = el.closest('.ce-popover, .tc-popover');
+                if (!hostMenu || !this.getNativeTableMenuType(hostMenu)) {
+                    el.remove();
+                }
+            });
+        },
         enhanceNativeTableDotsMenu(menuEl) {
-            if (!this.isNativeTableDotsMenu(menuEl)) return;
-            if (menuEl.getAttribute('data-ld-native-enhanced') === '1') return;
-            menuEl.setAttribute('data-ld-native-enhanced', '1');
-
-            this.addNativeTableMenuAction(menuEl, 'Duplicate column', (cell) => this.duplicateTableColumn(cell));
-            this.addNativeTableMenuAction(menuEl, 'Move row up', (cell) => this.moveTableRow(cell, 'up'));
-            this.addNativeTableMenuAction(menuEl, 'Move row down', (cell) => this.moveTableRow(cell, 'down'));
+            const menuType = this.getNativeTableMenuType(menuEl);
+            if (!menuType) return;
+            const stale = menuEl.querySelectorAll('[data-ld-native-table-action="1"]');
+            stale.forEach((el) => el.remove());
+            if (menuType === 'row') {
+                this.addNativeTableMenuAction(menuEl, 'duplicate-row', 'Duplicate row', (cell) => this.duplicateTableRow(cell));
+                this.addNativeTableMenuAction(menuEl, 'move-row-up', 'Move row up', (cell) => this.moveTableRow(cell, 'up'));
+                this.addNativeTableMenuAction(menuEl, 'move-row-down', 'Move row down', (cell) => this.moveTableRow(cell, 'down'));
+                this.addNativeTableMenuAction(menuEl, 'row-background-color', 'Row background color...', (cell) => this.pickTableRowColor(cell));
+                this.addNativeTableMenuAction(menuEl, 'row-background-hex', 'Row background hex...', (cell) => this.promptTableRowColor(cell));
+            } else if (menuType === 'column') {
+                this.addNativeTableMenuAction(menuEl, 'duplicate-column', 'Duplicate column', (cell) => this.duplicateTableColumn(cell));
+                this.addNativeTableMenuAction(menuEl, 'column-background-color', 'Column background color...', (cell) => this.pickTableColumnColor(cell));
+            }
         },
         ensureNativeTableMenuEnhancer() {
             if (this._nativeTableMenuObserver) return;
+            this.removeStaleNativeTableActions();
             this._nativeTableMenuObserver = new MutationObserver((mutations) => {
                 mutations.forEach((mutation) => {
                     mutation.addedNodes.forEach((node) => {
                         if (!node || node.nodeType !== 1) return;
                         const el = node;
-                        if (this.isNativeTableDotsMenu(el)) this.enhanceNativeTableDotsMenu(el);
-                        const nestedMenus = Array.from(el.querySelectorAll ? el.querySelectorAll('div, section, ul') : []);
+                        if (this.getNativeTableMenuType(el)) this.enhanceNativeTableDotsMenu(el);
+                        const nestedMenus = Array.from(el.querySelectorAll ? el.querySelectorAll('.ce-popover, .tc-popover') : []);
                         nestedMenus.forEach((menu) => this.enhanceNativeTableDotsMenu(menu));
                     });
                 });
@@ -1589,7 +1685,9 @@ async fetchMessages(roomId) {
             this._tableContextMenuOutsideHandler = (event) => {
                 if (!this._tableContextMenuEl) return;
                 if (this._tableContextMenuEl.contains(event.target)) return;
+                if (this._tableNumberAdjustEl && this._tableNumberAdjustEl.contains(event.target)) return;
                 this.closeTableContextMenu();
+                this.closeTableNumberAdjustMenu();
             };
 
             this._tableCellSelectStartHandler = (event) => {
@@ -2085,6 +2183,12 @@ async fetchMessages(roomId) {
             if (!pos) return;
             const current = this.getCellPixelSize(pos.rows[0] && pos.rows[0][pos.cIdx], 'width', 140);
             const next = Math.max(60, Math.min(1200, current + delta));
+            this.setTableColumnWidth(referenceCell, next);
+        },
+        setTableColumnWidth(referenceCell, width) {
+            const pos = this.getTableCellPosition(referenceCell);
+            if (!pos) return;
+            const next = Math.max(60, Math.min(1200, Number(width) || 140));
             pos.rows.forEach((row) => {
                 const cell = row[pos.cIdx];
                 if (!cell) return;
@@ -2100,6 +2204,13 @@ async fetchMessages(roomId) {
             const row = pos.rows[pos.rIdx] || [];
             const current = this.getCellPixelSize(row[0], 'height', 42);
             const next = Math.max(24, Math.min(600, current + delta));
+            this.setTableRowHeight(referenceCell, next);
+        },
+        setTableRowHeight(referenceCell, height) {
+            const pos = this.getTableCellPosition(referenceCell);
+            if (!pos) return;
+            const row = pos.rows[pos.rIdx] || [];
+            const next = Math.max(24, Math.min(600, Number(height) || 42));
             row.forEach((cell) => {
                 if (!cell) return;
                 cell.style.height = `${next}px`;
@@ -2111,8 +2222,162 @@ async fetchMessages(roomId) {
             if (!referenceCell) return;
             const current = this.getCellPadding(referenceCell);
             const next = Math.max(0, Math.min(40, current + delta));
+            this.setTableCellPadding(referenceCell, next);
+        },
+        setTableCellPadding(referenceCell, value) {
+            if (!referenceCell) return;
+            const next = Math.max(0, Math.min(40, Number(value) || 0));
             referenceCell.style.padding = `${next}px`;
             this.markTableChanged();
+        },
+        getTableBorderWidth(referenceCell) {
+            const pos = this.getTableCellPosition(referenceCell);
+            if (!pos || !pos.rows[0] || !pos.rows[0][0]) return 1;
+            const sample = pos.rows[0][0];
+            const styled = parseFloat(sample.style.borderWidth || '1');
+            if (Number.isFinite(styled) && styled >= 0) return styled;
+            const computed = parseFloat(window.getComputedStyle(sample).borderWidth || '1');
+            return Number.isFinite(computed) && computed >= 0 ? computed : 1;
+        },
+        setTableBorderWidth(referenceCell, width) {
+            const pos = this.getTableCellPosition(referenceCell);
+            if (!pos || !pos.rows[0] || !pos.rows[0][0]) return;
+            const sample = pos.rows[0][0];
+            const next = Math.max(0, Math.min(12, Number(width) || 1));
+            const color = sample.style.borderColor || '#334155';
+            this.setTableAllBorders(referenceCell, next, color);
+        },
+        ensureTableNumberAdjustMenu() {
+            if (this._tableNumberAdjustEl) return this._tableNumberAdjustEl;
+            const wrap = document.createElement('div');
+            wrap.style.position = 'fixed';
+            wrap.style.zIndex = '10000';
+            wrap.style.display = 'none';
+            wrap.style.background = '#0f172a';
+            wrap.style.border = '1px solid #334155';
+            wrap.style.borderRadius = '8px';
+            wrap.style.boxShadow = '0 12px 30px rgba(0,0,0,0.35)';
+            wrap.style.padding = '10px';
+            wrap.style.minWidth = '240px';
+
+            const title = document.createElement('div');
+            title.style.fontSize = '11px';
+            title.style.fontWeight = '700';
+            title.style.color = '#cbd5e1';
+            title.style.marginBottom = '8px';
+
+            const row = document.createElement('div');
+            row.style.display = 'flex';
+            row.style.gap = '8px';
+            row.style.alignItems = 'center';
+
+            const mkBtn = (txt) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.textContent = txt;
+                b.style.width = '30px';
+                b.style.height = '30px';
+                b.style.background = '#1e293b';
+                b.style.color = '#e2e8f0';
+                b.style.border = '1px solid #334155';
+                b.style.borderRadius = '6px';
+                b.style.cursor = 'pointer';
+                return b;
+            };
+            const minus = mkBtn('-');
+            const plus = mkBtn('+');
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.step = '1';
+            input.style.flex = '1';
+            input.style.height = '30px';
+            input.style.padding = '4px 8px';
+            input.style.background = '#111827';
+            input.style.color = '#e2e8f0';
+            input.style.border = '1px solid #334155';
+            input.style.borderRadius = '6px';
+            input.style.outline = 'none';
+
+            const unit = document.createElement('span');
+            unit.style.fontSize = '11px';
+            unit.style.color = '#94a3b8';
+            unit.textContent = 'px';
+
+            row.appendChild(minus);
+            row.appendChild(input);
+            row.appendChild(plus);
+            row.appendChild(unit);
+            wrap.appendChild(title);
+            wrap.appendChild(row);
+            document.body.appendChild(wrap);
+
+            this._tableNumberAdjustEl = wrap;
+            this._tableNumberAdjustTitleEl = title;
+            this._tableNumberAdjustInputEl = input;
+            this._tableNumberAdjustUnitEl = unit;
+            this._tableNumberAdjustMinusEl = minus;
+            this._tableNumberAdjustPlusEl = plus;
+            return wrap;
+        },
+        closeTableNumberAdjustMenu() {
+            if (!this._tableNumberAdjustEl) return;
+            this._tableNumberAdjustEl.style.display = 'none';
+            this._tableNumberAdjustConfig = null;
+            this._tableNumberAdjustCell = null;
+        },
+        openTableNumberAdjustMenu(referenceCell, config) {
+            if (!referenceCell || !config) return;
+            const wrap = this.ensureTableNumberAdjustMenu();
+            const title = this._tableNumberAdjustTitleEl;
+            const input = this._tableNumberAdjustInputEl;
+            const unit = this._tableNumberAdjustUnitEl;
+            const minus = this._tableNumberAdjustMinusEl;
+            const plus = this._tableNumberAdjustPlusEl;
+            if (!wrap || !title || !input || !unit || !minus || !plus) return;
+
+            this._tableNumberAdjustCell = referenceCell;
+            this._tableNumberAdjustConfig = config;
+
+            const clamp = (v) => Math.max(config.min, Math.min(config.max, v));
+            const read = () => clamp(Number(config.get(referenceCell)));
+            const apply = (raw) => {
+                const num = Number(raw);
+                if (!Number.isFinite(num)) return;
+                const value = clamp(num);
+                config.set(referenceCell, value);
+                input.value = String(Math.round(value * 100) / 100);
+            };
+
+            title.textContent = config.title;
+            unit.textContent = config.unit || 'px';
+            input.step = String(config.step || 1);
+            input.min = String(config.min);
+            input.max = String(config.max);
+            input.value = String(Math.round(read() * 100) / 100);
+
+            minus.onclick = () => apply(read() - config.step);
+            plus.onclick = () => apply(read() + config.step);
+            input.onchange = () => apply(input.value);
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    apply(input.value);
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    this.closeTableNumberAdjustMenu();
+                }
+            };
+
+            const x = Number.isFinite(this._tableContextMenuLastX) ? this._tableContextMenuLastX : Math.round(window.innerWidth * 0.5);
+            const y = Number.isFinite(this._tableContextMenuLastY) ? this._tableContextMenuLastY : Math.round(window.innerHeight * 0.5);
+            wrap.style.display = 'block';
+            const rect = wrap.getBoundingClientRect();
+            const maxX = Math.max(8, window.innerWidth - rect.width - 8);
+            const maxY = Math.max(8, window.innerHeight - rect.height - 8);
+            wrap.style.left = `${Math.max(8, Math.min(x, maxX))}px`;
+            wrap.style.top = `${Math.max(8, Math.min(y, maxY))}px`;
+            input.focus();
+            input.select();
         },
         mergeCellWithRight(referenceCell) {
             const pos = this.getTableCellPosition(referenceCell);
@@ -2305,6 +2570,18 @@ async fetchMessages(roomId) {
                 this.markTableChanged();
             });
         },
+        promptTableRowColor(referenceCell) {
+            if (!referenceCell) return;
+            this.showPrompt('Row color (hex)', 'Hex color', (val) => {
+                const hex = this.normalizeHexColor(val);
+                if (!hex) {
+                    this.showAlert('Invalid color', 'Use a hex value like #ffcc00 or ffcc00.');
+                    return;
+                }
+                this.applyStyleToTableRow(referenceCell, (cell) => { this.setCellBackgroundColor(cell, hex); });
+                this.markTableChanged();
+            });
+        },
         pickTableColumnColor(referenceCell) {
             if (!referenceCell) return;
             this.pickColor(referenceCell.style.backgroundColor || '#ffffff', (hex) => {
@@ -2428,6 +2705,21 @@ async fetchMessages(roomId) {
                 const clone = source.cloneNode(true);
                 source.parentNode.insertBefore(clone, source.nextSibling);
             });
+            this.markTableChanged();
+        },
+        duplicateTableRow(referenceCell) {
+            const pos = this.getTableCellPosition(referenceCell);
+            if (!pos) return;
+            const rowEl = referenceCell ? referenceCell.closest('.tc-row, tr') : null;
+            if (!rowEl || !rowEl.parentNode) return;
+
+            const clone = rowEl.cloneNode(true);
+            rowEl.parentNode.insertBefore(clone, rowEl.nextSibling);
+
+            const freshRows = this.getEditorTableRows(pos.tableEl);
+            const targetRow = freshRows[pos.rIdx + 1] || [];
+            const focusCell = targetRow[pos.cIdx] || targetRow[0] || null;
+            if (focusCell) this.focusTableCell(focusCell);
             this.markTableChanged();
         },
         moveTableRow(referenceCell, direction) {
@@ -2591,6 +2883,11 @@ async fetchMessages(roomId) {
                 this.duplicateTableColumn(this._tableMenuCell);
                 this.closeTableContextMenu();
             }));
+            menu.appendChild(makeButton('Duplicate row', () => {
+                if (!this._tableMenuCell) return;
+                this.duplicateTableRow(this._tableMenuCell);
+                this.closeTableContextMenu();
+            }));
             menu.appendChild(makeButton('Move row up', () => {
                 if (!this._tableMenuCell) return;
                 this.moveTableRow(this._tableMenuCell, 'up');
@@ -2659,39 +2956,62 @@ async fetchMessages(roomId) {
                 this.clearTableCellColor(this._tableMenuCell);
                 this.closeTableContextMenu();
             }));
-            menu.appendChild(makeButton('Column width +', () => {
+            menu.appendChild(makeButton('Column width...', () => {
                 if (!this._tableMenuCell) return;
-                this.adjustTableColumnWidth(this._tableMenuCell, 20);
+                this.openTableNumberAdjustMenu(this._tableMenuCell, {
+                    title: 'Column width',
+                    unit: 'px',
+                    step: 20,
+                    min: 60,
+                    max: 1200,
+                    get: (cell) => {
+                        const pos = this.getTableCellPosition(cell);
+                        if (!pos) return 140;
+                        return this.getCellPixelSize(pos.rows[0] && pos.rows[0][pos.cIdx], 'width', 140);
+                    },
+                    set: (cell, value) => this.setTableColumnWidth(cell, value)
+                });
                 this.closeTableContextMenu();
             }));
-            menu.appendChild(makeButton('Column width -', () => {
+            menu.appendChild(makeButton('Row height...', () => {
                 if (!this._tableMenuCell) return;
-                this.adjustTableColumnWidth(this._tableMenuCell, -20);
+                this.openTableNumberAdjustMenu(this._tableMenuCell, {
+                    title: 'Row height',
+                    unit: 'px',
+                    step: 10,
+                    min: 24,
+                    max: 600,
+                    get: (cell) => {
+                        const pos = this.getTableCellPosition(cell);
+                        if (!pos) return 42;
+                        const row = pos.rows[pos.rIdx] || [];
+                        return this.getCellPixelSize(row[0], 'height', 42);
+                    },
+                    set: (cell, value) => this.setTableRowHeight(cell, value)
+                });
                 this.closeTableContextMenu();
             }));
-            menu.appendChild(makeButton('Row height +', () => {
+            menu.appendChild(makeButton('Cell padding...', () => {
                 if (!this._tableMenuCell) return;
-                this.adjustTableRowHeight(this._tableMenuCell, 10);
-                this.closeTableContextMenu();
-            }));
-            menu.appendChild(makeButton('Row height -', () => {
-                if (!this._tableMenuCell) return;
-                this.adjustTableRowHeight(this._tableMenuCell, -10);
-                this.closeTableContextMenu();
-            }));
-            menu.appendChild(makeButton('Cell padding +', () => {
-                if (!this._tableMenuCell) return;
-                this.adjustTableCellPadding(this._tableMenuCell, 2);
-                this.closeTableContextMenu();
-            }));
-            menu.appendChild(makeButton('Cell padding -', () => {
-                if (!this._tableMenuCell) return;
-                this.adjustTableCellPadding(this._tableMenuCell, -2);
+                this.openTableNumberAdjustMenu(this._tableMenuCell, {
+                    title: 'Cell padding',
+                    unit: 'px',
+                    step: 2,
+                    min: 0,
+                    max: 40,
+                    get: (cell) => this.getCellPadding(cell),
+                    set: (cell, value) => this.setTableCellPadding(cell, value)
+                });
                 this.closeTableContextMenu();
             }));
             menu.appendChild(makeButton('Row background color...', () => {
                 if (!this._tableMenuCell) return;
                 this.pickTableRowColor(this._tableMenuCell);
+                this.closeTableContextMenu();
+            }));
+            menu.appendChild(makeButton('Row background hex...', () => {
+                if (!this._tableMenuCell) return;
+                this.promptTableRowColor(this._tableMenuCell);
                 this.closeTableContextMenu();
             }));
             menu.appendChild(makeButton('Column background color...', () => {
@@ -2749,14 +3069,17 @@ async fetchMessages(roomId) {
                 this.pickTableBorderColor(this._tableMenuCell);
                 this.closeTableContextMenu();
             }));
-            menu.appendChild(makeButton('Border width +', () => {
+            menu.appendChild(makeButton('Border width...', () => {
                 if (!this._tableMenuCell) return;
-                this.adjustTableAllBorders(this._tableMenuCell, 1);
-                this.closeTableContextMenu();
-            }));
-            menu.appendChild(makeButton('Border width -', () => {
-                if (!this._tableMenuCell) return;
-                this.adjustTableAllBorders(this._tableMenuCell, -1);
+                this.openTableNumberAdjustMenu(this._tableMenuCell, {
+                    title: 'Border width',
+                    unit: 'px',
+                    step: 1,
+                    min: 0,
+                    max: 12,
+                    get: (cell) => this.getTableBorderWidth(cell),
+                    set: (cell, value) => this.setTableBorderWidth(cell, value)
+                });
                 this.closeTableContextMenu();
             }));
             menu.appendChild(makeButton('Distribute columns evenly', () => {
@@ -2780,6 +3103,10 @@ async fetchMessages(roomId) {
                 this.closeTableContextMenu();
             }));
 
+            const sortedActionButtons = Array.from(menu.querySelectorAll('button[data-table-action="1"]'))
+                .sort((a, b) => String(a.textContent || '').localeCompare(String(b.textContent || ''), undefined, { sensitivity: 'base' }));
+            sortedActionButtons.forEach((btn) => menu.appendChild(btn));
+
             document.body.appendChild(menu);
             this._tableContextMenuEl = menu;
             this._tableContextMenuSearchInput = searchInput;
@@ -2788,6 +3115,9 @@ async fetchMessages(roomId) {
         openTableContextMenu(cell, x, y) {
             this.ensureTableContextMenu();
             this._tableMenuCell = cell;
+            this._tableContextMenuLastX = x;
+            this._tableContextMenuLastY = y;
+            this.closeTableNumberAdjustMenu();
             const menu = this._tableContextMenuEl;
             if (!menu) return;
             if (this._tableContextMenuSearchInput) {
