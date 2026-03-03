@@ -47,6 +47,46 @@ $metaParts = [$metaLabel];
 if ($metaDate !== '') $metaParts[] = $metaDate;
 if (!empty($metaActor)) $metaParts[] = 'by ' . $metaActor;
 $metaText = implode(' ', $metaParts);
+
+$publicChildrenByParent = [];
+foreach ($items as $item) {
+    if ((int)($item['is_public'] ?? 0) !== 1) continue;
+    $parentId = (int)($item['parent_id'] ?? 0);
+    if (!isset($publicChildrenByParent[$parentId])) {
+        $publicChildrenByParent[$parentId] = [];
+    }
+    $publicChildrenByParent[$parentId][] = $item;
+}
+
+function renderPublicSubpages(array $childrenByParent, int $parentId, string $activeSlug, int $depth = 0): void {
+    $children = $childrenByParent[$parentId] ?? [];
+    $subpages = array_values(array_filter($children, fn($i) => ($i['type'] ?? '') === 'subpage'));
+    if (empty($subpages)) return;
+
+    $ulClass = $depth === 0
+        ? 'mt-1 ml-4 space-y-1'
+        : 'mt-1 ml-4 space-y-1 border-l border-slate-700/60 pl-2';
+    echo '<ul class="' . $ulClass . '">';
+
+    foreach ($subpages as $subp) {
+        $subSlug = (string)($subp['slug'] ?? '');
+        $subTitle = htmlspecialchars((string)($subp['title'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $isActive = $subSlug === $activeSlug;
+        $linkClass = $isActive
+            ? 'bg-blue-600/20 text-blue-400 font-bold nav-item-active shadow-inner'
+            : 'text-slate-400 hover:bg-slate-700/50 hover:text-white';
+        $textSize = $depth === 0 ? 'text-sm' : 'text-xs';
+
+        echo '<li class="nav-item">';
+        echo '<a href="?s=' . htmlspecialchars($subSlug, ENT_QUOTES, 'UTF-8') . '" class="rounded-xl transition-all flex items-center pl-4 pr-2 py-1.5 ' . $textSize . ' ' . $linkClass . '">';
+        echo $subTitle;
+        echo '</a>';
+        renderPublicSubpages($childrenByParent, (int)$subp['id'], $activeSlug, $depth + 1);
+        echo '</li>';
+    }
+
+    echo '</ul>';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -95,18 +135,7 @@ $metaText = implode(' ', $metaParts);
                                 <a href="?s=<?php echo $sp['slug']; ?>" class="rounded-xl transition-all flex items-center px-4 py-2 text-base <?php echo $sp['slug'] == $slug ? 'bg-blue-600/20 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'; ?>">
                                     <?php echo $sp['title']; ?>
                                 </a>
-                                <?php $subpages = array_filter($items, fn($i) => $i['type'] === 'subpage' && $i['parent_id'] == $sp['id'] && $i['is_public'] == 1); ?>
-                                <?php if (!empty($subpages)): ?>
-                                    <ul class="mt-1 ml-4 space-y-1">
-                                        <?php foreach ($subpages as $subp): ?>
-                                            <li class="nav-item">
-                                                <a href="?s=<?php echo $subp['slug']; ?>" class="rounded-xl transition-all flex items-center pl-4 pr-2 py-1.5 text-sm <?php echo $subp['slug'] == $slug ? 'bg-blue-600/20 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'; ?>">
-                                                    <?php echo $subp['title']; ?>
-                                                </a>
-                                            </li>
-                                        <?php endforeach; ?>
-                                    </ul>
-                                <?php endif; ?>
+                                <?php renderPublicSubpages($publicChildrenByParent, (int)$sp['id'], (string)$slug); ?>
                             </li>
                         <?php endforeach; ?>
                     </ul>

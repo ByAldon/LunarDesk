@@ -32,7 +32,7 @@ include 'version.php';
     <style>[v-cloak]{display:none!important;}</style>
 </head>
 <body class="bg-slate-800 h-screen overflow-hidden text-slate-300 selection:bg-blue-500/30">
-    <div id="app" class="flex flex-col h-full w-full relative" v-cloak>
+    <div id="app" data-app-version="<?php echo htmlspecialchars($app_version, ENT_QUOTES, 'UTF-8'); ?>" class="flex flex-col h-full w-full relative" v-cloak @click="closeHeaderMenu">
         
         <header class="h-20 shrink-0 flex items-center justify-between px-8 z-30 relative bg-transparent">
             <div class="flex items-center gap-4">
@@ -41,13 +41,33 @@ include 'version.php';
                 </div>
                 <span class="font-black text-white uppercase tracking-widest text-sm drop-shadow-md">LunarDesk</span>
             </div>
-            <div class="flex items-center gap-6 bg-slate-800 border border-slate-700 px-6 py-2.5 rounded-2xl shadow-xl">
-                <button v-if="currentUser" @click="profileForm = { username: currentUser.username, nickname: currentUser.nickname, email: currentUser.email, password: '' }; showProfileModal = true" class="text-[10px] text-slate-300 hover:text-white font-black uppercase tracking-widest transition-colors">{{ currentUser.nickname || currentUser.username }}</button>
-                <div class="h-4 w-px bg-slate-600"></div>
-                <button v-if="currentUser?.role === 'admin'" @click="openUsersModal" class="text-slate-300 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors">Users</button>
-                <button @click="showManualModal = true" class="text-slate-300 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors">Manual</button>
-                <button @click="hardRefresh" class="text-slate-300 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors">Hard Refresh</button>
-                <a href="?action=logout" class="text-red-400 hover:text-red-300 text-[10px] font-black uppercase tracking-widest transition-colors">Logout</a>
+            <div class="relative flex items-center gap-3" @click.stop>
+                <button
+                    v-if="currentUser"
+                    @click="profileForm = { username: currentUser.username, nickname: currentUser.nickname, email: currentUser.email, password: '' }; showProfileModal = true"
+                    class="text-[10px] text-slate-300 hover:text-white font-black uppercase tracking-widest transition-colors"
+                >
+                    {{ currentUser.nickname || currentUser.username }}
+                </button>
+                <button
+                    @click.stop="toggleHeaderMenu"
+                    class="flex items-center justify-center w-11 h-11 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                    aria-label="Open menu"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11.983 3.5a1.9 1.9 0 011.786 1.257l.143.393a1.9 1.9 0 002.24 1.183l.411-.083a1.9 1.9 0 012.09 2.09l-.083.411a1.9 1.9 0 001.183 2.24l.393.143a1.9 1.9 0 010 3.572l-.393.143a1.9 1.9 0 00-1.183 2.24l.083.411a1.9 1.9 0 01-2.09 2.09l-.411-.083a1.9 1.9 0 00-2.24 1.183l-.143.393a1.9 1.9 0 01-3.572 0l-.143-.393a1.9 1.9 0 00-2.24-1.183l-.411.083a1.9 1.9 0 01-2.09-2.09l.083-.411a1.9 1.9 0 00-1.183-2.24l-.393-.143a1.9 1.9 0 010-3.572l.393-.143a1.9 1.9 0 001.183-2.24l-.083-.411a1.9 1.9 0 012.09-2.09l.411.083a1.9 1.9 0 002.24-1.183l.143-.393A1.9 1.9 0 0111.983 3.5z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" />
+                    </svg>
+                </button>
+                <div
+                    v-if="showHeaderMenu"
+                    class="absolute right-0 top-full mt-3 min-w-[220px] bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl p-2 flex flex-col gap-1 z-50"
+                >
+                    <button v-if="currentUser?.role === 'admin'" @click="openUsersModal(); showHeaderMenu = false" class="text-left px-4 py-3 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-xl font-black uppercase tracking-widest transition-colors">Users</button>
+                    <button @click="showManualModal = true; showHeaderMenu = false" class="text-left px-4 py-3 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-xl font-black uppercase tracking-widest transition-colors">Manual</button>
+                    <button @click="hardRefresh(); showHeaderMenu = false" class="text-left px-4 py-3 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 rounded-xl font-black uppercase tracking-widest transition-colors">Hard Refresh</button>
+                    <a href="?action=logout" @click="showHeaderMenu = false" class="text-left px-4 py-3 text-[10px] text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl font-black uppercase tracking-widest transition-colors">Logout</a>
+                </div>
             </div>
         </header>
 
@@ -289,6 +309,22 @@ include 'version.php';
         </transition>
 
         <transition name="modal">
+            <div v-if="showUpdateModal" class="fixed inset-0 z-[610] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <div class="bg-slate-800 border border-slate-700 p-10 rounded-3xl w-full max-w-2xl shadow-2xl">
+                    <h2 class="text-2xl font-black text-white mb-2 uppercase tracking-tighter">System Updated</h2>
+                    <p class="text-slate-400 text-xs uppercase tracking-[0.2em] mb-6">Version {{ updateNoticeVersion }}</p>
+                    <p class="text-slate-300 text-sm mb-5">LunarDesk has been updated. What's new:</p>
+                    <ul class="list-disc pl-6 text-slate-300 text-sm space-y-2 mb-8">
+                        <li v-for="note in updateNotes" :key="note">{{ note }}</li>
+                    </ul>
+                    <div class="flex justify-end">
+                        <button @click="dismissUpdateNotice" class="bg-blue-600 hover:bg-blue-500 text-white font-black uppercase py-3 px-8 rounded-xl text-xs shadow-lg shadow-blue-500/20 transition-all">Continue</button>
+                    </div>
+                </div>
+            </div>
+        </transition>
+
+        <transition name="modal">
             <div v-if="showManualModal" class="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
                 <div class="bg-slate-800 border border-slate-700 p-10 rounded-3xl w-full max-w-6xl shadow-2xl max-h-[92vh] overflow-y-auto">
                     <div class="flex justify-between items-start mb-8 gap-6">
@@ -300,19 +336,34 @@ include 'version.php';
                     </div>
 
                     <div class="space-y-8 text-slate-300 text-sm leading-relaxed">
-                        <section>
+                        <section id="manual-index" class="bg-slate-900/50 border border-slate-700 rounded-2xl p-6">
+                            <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-4">Index</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                                <a href="#manual-1" class="text-blue-300 hover:text-blue-200 transition-colors">1. Workspace Layout</a>
+                                <a href="#manual-2" class="text-blue-300 hover:text-blue-200 transition-colors">2. Structure: Spaces, Pages, Subpages</a>
+                                <a href="#manual-3" class="text-blue-300 hover:text-blue-200 transition-colors">3. Page Header Controls</a>
+                                <a href="#manual-4" class="text-blue-300 hover:text-blue-200 transition-colors">4. Editor Blocks and Formatting</a>
+                                <a href="#manual-5" class="text-blue-300 hover:text-blue-200 transition-colors">5. Autosave, Drafts and Publish Flow</a>
+                                <a href="#manual-6" class="text-blue-300 hover:text-blue-200 transition-colors">6. Table Editing: Core Actions</a>
+                                <a href="#manual-7" class="text-blue-300 hover:text-blue-200 transition-colors">7. Manual Multi-Cell Merge</a>
+                                <a href="#manual-8" class="text-blue-300 hover:text-blue-200 transition-colors">8. Keyboard Shortcuts</a>
+                                <a href="#manual-9" class="text-blue-300 hover:text-blue-200 transition-colors">9. Stream, Terminal and Admin Utilities</a>
+                            </div>
+                        </section>
+
+                        <section id="manual-1">
                             <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">1. Workspace Layout</h3>
                             <p>The interface is split into three primary columns. The left column contains Stream and Terminal, the middle column contains your Spaces and page tree, and the main panel contains the active page editor.</p>
                             <p class="mt-2">You can resize the columns by dragging the vertical handles between panels. Inside Stream, you can also resize the Channels area with the horizontal drag handle.</p>
                         </section>
 
-                        <section>
+                        <section id="manual-2">
                             <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">2. Structure: Spaces, Pages, Subpages</h3>
                             <p>Use <strong>+ New Space</strong> to create a top-level container. Inside each space, create pages and nested subpages from the plus buttons shown on hover. Use the up/down controls to reorder items.</p>
                             <p class="mt-2">Every item can hold draft data. A page marked as <strong>Unpublished</strong> has changes saved in draft that are not yet pushed to the public page.</p>
                         </section>
 
-                        <section>
+                        <section id="manual-3">
                             <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">3. Page Header Controls</h3>
                             <p>At the top of each page, you can edit title and cover banner. In the sticky action bar, the controls work as follows:</p>
                             <ul class="list-disc pl-6 mt-2 space-y-1">
@@ -324,25 +375,27 @@ include 'version.php';
                             </ul>
                         </section>
 
-                        <section>
+                        <section id="manual-4">
                             <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">4. Editor Blocks and Formatting</h3>
                             <p>LunarDesk uses block-based editing. Add content blocks using EditorJS tools such as Paragraph, Header, List, Checkboxes, Quote, Warning, Code, Delimiter, Image, Embed and Table.</p>
                             <p class="mt-2">Inline formatting supports bold, italic, links, underline and inline code. Most blocks can be edited directly and reordered with the standard block controls.</p>
                         </section>
 
-                        <section>
+                        <section id="manual-5">
                             <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">5. Autosave, Drafts and Publish Flow</h3>
                             <p>Changes are auto-saved to draft while you edit. The signal timestamp confirms the latest successful save. Draft saves do not automatically update the public page.</p>
                             <p class="mt-2">To push your latest draft to public output, use <strong>Publish</strong>. Public viewers only see published content from <code>p.php?s=slug</code>.</p>
                         </section>
 
-                        <section>
+                        <section id="manual-6">
                             <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">6. Table Editing: Core Actions</h3>
-                            <p>Right-click any table cell to open the table context menu. Available actions include row/column insert and delete, row height and column width adjustments, cell padding, background colors, alignment, border styling, table layout mode and table deletion.</p>
+                            <p>Right-click any table cell to open the table context menu. You can also type <strong>/</strong> inside a table cell to open the Slash Commands popup with search.</p>
+                            <p class="mt-2">Both menus provide the same actions: row/column insert and delete, merge/split, duplicate cell content, row height and column width adjustments, cell padding, background colors, alignment, border styling, table layout mode and table deletion.</p>
+                            <p class="mt-2">Example slash queries: <code>/radiobutton</code>, <code>/duplicate right</code>, <code>/insert row below</code>.</p>
                             <p class="mt-2">Use <strong>Tab</strong> to move to the next cell. At the end of a row, Tab can create a new row automatically.</p>
                         </section>
 
-                        <section>
+                        <section id="manual-7">
                             <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">7. Manual Multi-Cell Merge (New)</h3>
                             <p>You can manually merge a selected range of cells into a single cell:</p>
                             <ul class="list-disc pl-6 mt-2 space-y-1">
@@ -353,18 +406,19 @@ include 'version.php';
                             <p class="mt-2">Validation rules: selection must be one continuous rectangle in the same table. If merged cells already exist in that range, split them first, then merge again.</p>
                         </section>
 
-                        <section>
+                        <section id="manual-8">
                             <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">8. Keyboard Shortcuts</h3>
                             <ul class="list-disc pl-6 mt-2 space-y-1">
                                 <li><strong>Ctrl/Cmd + Z:</strong> Undo</li>
                                 <li><strong>Ctrl/Cmd + Shift + Z:</strong> Redo</li>
                                 <li><strong>Ctrl/Cmd + Y:</strong> Redo</li>
+                                <li><strong>/ (inside table cell):</strong> Open Table Slash Commands popup</li>
                                 <li><strong>Tab / Shift + Tab:</strong> Move between table cells</li>
                                 <li><strong>Esc:</strong> Clear current manual table selection</li>
                             </ul>
                         </section>
 
-                        <section>
+                        <section id="manual-9">
                             <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">9. Stream, Terminal and Admin Utilities</h3>
                             <p><strong>Stream</strong> shows channel messages and webhook output. <strong>Terminal</strong> is an admin command/message stream. Admin actions include room settings, webhook generation, message cleanup, and user access management.</p>
                         </section>
@@ -442,6 +496,58 @@ include 'version.php';
                 </div>
             </div>
         </transition>
+
+        <div v-if="showTableSlashModal" class="fixed inset-0 z-[175] bg-black/70 backdrop-blur-sm flex items-center justify-center p-6">
+            <div class="bg-slate-800 border border-slate-700 p-8 rounded-3xl w-full max-w-xl shadow-2xl">
+                <h2 class="text-xl font-black text-white mb-4 uppercase tracking-tighter">Table Slash Commands</h2>
+                <p class="text-slate-400 text-xs uppercase tracking-[0.2em] mb-4">Type to search command</p>
+                <form @submit.prevent="runTableSlashCommand()" class="space-y-4">
+                    <input
+                        type="text"
+                        v-model="tableSlashQuery"
+                        ref="tableSlashInputRef"
+                        class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-sm text-white outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all placeholder-slate-600"
+                        placeholder="radiobutton"
+                    >
+                    <div class="max-h-64 overflow-y-auto space-y-2">
+                        <button
+                            v-for="cmd in getFilteredTableSlashCommands()"
+                            :key="cmd.id"
+                            type="button"
+                            @click="runTableSlashCommand(cmd.id)"
+                            class="w-full text-left bg-slate-900/70 hover:bg-slate-700/70 border border-slate-700 rounded-xl p-3 transition-colors"
+                        >
+                            <div class="text-white font-black text-sm">{{ cmd.label }}</div>
+                            <div class="text-slate-400 text-xs mt-1">{{ cmd.hint }}</div>
+                        </button>
+                    </div>
+                    <div class="flex gap-4 pt-2">
+                        <button type="button" @click="closeTableSlashHelper" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-black uppercase py-4 rounded-xl text-xs transition-all border border-slate-600">Cancel</button>
+                        <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 transition-all">Run</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div v-if="showRadioBuilderModal" class="fixed inset-0 z-[170] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
+            <div class="bg-slate-800 border border-slate-700 p-10 rounded-3xl w-full max-w-lg shadow-2xl">
+                <h2 class="text-2xl font-black text-white mb-8 uppercase tracking-tighter">Insert Radio Group</h2>
+                <form @submit.prevent="submitTableRadioBuilder" class="space-y-5">
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Group Title (optional)</label>
+                        <input type="text" v-model="radioBuilderForm.title" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-sm text-white outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all placeholder-slate-600" placeholder="Choose one">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Options (one per line)</label>
+                        <textarea v-model="radioBuilderForm.optionsText" ref="radioOptionsInputRef" rows="7" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-sm text-white outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all placeholder-slate-600 resize-y" placeholder="Option 1&#10;Option 2" required></textarea>
+                    </div>
+                    <div class="flex gap-4 pt-2">
+                        <button type="button" @click="cancelTableRadioBuilder" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-black uppercase py-4 rounded-xl text-xs transition-all border border-slate-600">Cancel</button>
+                        <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 transition-all">Insert</button>
+                    </div>
+                </form>
+            </div>
+        </div>
 
         <div v-if="showPromptModal" class="fixed inset-0 z-[150] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
             <div class="bg-slate-800 border border-slate-700 p-12 rounded-3xl w-full max-w-md shadow-2xl">

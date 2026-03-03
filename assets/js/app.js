@@ -79,6 +79,12 @@ createApp({
             lastDragY: null,
             showSettingsModal: false,
             settingsRoom: null,
+            showTableSlashModal: false,
+            tableSlashCell: null,
+            tableSlashQuery: '',
+            showRadioBuilderModal: false,
+            radioBuilderCell: null,
+            radioBuilderForm: { title: '', optionsText: '' },
             showPromptModal: false,
             promptTitle: '',
             promptInput: '',
@@ -87,6 +93,10 @@ createApp({
             profileForm: { username: '', email: '', nickname: '', password: '' },
             showUsersModal: false,
             showManualModal: false,
+            showHeaderMenu: false,
+            showUpdateModal: false,
+            updateNoticeVersion: '',
+            updateNotes: [],
             userList: [],
             editingUser: false,
             userForm: { username: '', email: '', nickname: '', role: 'user' },
@@ -109,6 +119,7 @@ createApp({
         await this.fetchRooms();
         await this.fetchAdminMessages();
         await this.restoreUiState();
+        this.evaluateUpdateNotice();
         
         setInterval(() => this.fetchData(), 10000);
         setInterval(() => this.fetchRooms(), 3000);
@@ -123,6 +134,48 @@ createApp({
         window.addEventListener('mouseup', this.stopDrag);
     },
     methods: {
+        getAppVersion() {
+            const root = document.getElementById('app');
+            return root && root.dataset ? String(root.dataset.appVersion || '') : '';
+        },
+        getUpdateSeenStorageKey(version) {
+            const uid = this.currentUser && Number.isFinite(Number(this.currentUser.id))
+                ? Number(this.currentUser.id)
+                : 'anon';
+            return `lunardesk_update_seen_${version}_${uid}`;
+        },
+        getUpdateNotesForVersion(version) {
+            const notesByVersion = {
+                'v2.9.4.11': [
+                    'One-time "System Updated" popup added per user per version.',
+                    'Popup now appears again automatically after each new version.',
+                    'Release highlights are shown directly in-app on first visit.'
+                ]
+            };
+            if (Array.isArray(notesByVersion[version]) && notesByVersion[version].length > 0) {
+                return notesByVersion[version];
+            }
+            return [
+                'This release contains improvements and fixes.',
+                'Open Manual for detailed changes and usage notes.'
+            ];
+        },
+        evaluateUpdateNotice() {
+            const version = this.getAppVersion();
+            if (!version) return;
+            const key = this.getUpdateSeenStorageKey(version);
+            if (localStorage.getItem(key) === '1') return;
+            this.updateNoticeVersion = version;
+            this.updateNotes = this.getUpdateNotesForVersion(version);
+            this.showUpdateModal = true;
+        },
+        dismissUpdateNotice() {
+            const version = this.updateNoticeVersion || this.getAppVersion();
+            if (version) {
+                localStorage.setItem(this.getUpdateSeenStorageKey(version), '1');
+            }
+            this.showUpdateModal = false;
+        },
         queueSilentRefresh(delayMs = 300) {
             if (this.silentRefreshTimer) clearTimeout(this.silentRefreshTimer);
             this.silentRefreshTimer = setTimeout(() => {
@@ -238,6 +291,12 @@ createApp({
                 });
             }
             this.saveUiState();
+        },
+        toggleHeaderMenu() {
+            this.showHeaderMenu = !this.showHeaderMenu;
+        },
+        closeHeaderMenu() {
+            this.showHeaderMenu = false;
         },
         async fetchUser() {
             try {
@@ -1030,6 +1089,291 @@ async fetchMessages(roomId) {
             if (this.editorHistoryIndex >= this.editorHistory.length - 1) return;
             await this.restoreHistoryAt(this.editorHistoryIndex + 1);
         },
+        getTableSlashCommands() {
+            return [
+                {
+                    id: 'radiobutton',
+                    label: 'radiobutton',
+                    hint: 'Insert radio buttons with text',
+                    run: (cell) => this.openTableRadioBuilder(cell)
+                },
+                {
+                    id: 'insert-row-above',
+                    label: 'insert row above',
+                    hint: 'Insert a row above current cell',
+                    run: (cell) => { this.insertTableRow(cell, 'above'); this.markTableChanged(); }
+                },
+                {
+                    id: 'insert-row-below',
+                    label: 'insert row below',
+                    hint: 'Insert a row below current cell',
+                    run: (cell) => { this.insertTableRow(cell, 'below'); this.markTableChanged(); }
+                },
+                {
+                    id: 'insert-column-left',
+                    label: 'insert column left',
+                    hint: 'Insert a column to the left',
+                    run: (cell) => { this.insertTableColumn(cell, 'left'); this.markTableChanged(); }
+                },
+                {
+                    id: 'insert-column-right',
+                    label: 'insert column right',
+                    hint: 'Insert a column to the right',
+                    run: (cell) => { this.insertTableColumn(cell, 'right'); this.markTableChanged(); }
+                },
+                {
+                    id: 'delete-row',
+                    label: 'delete row',
+                    hint: 'Delete current row',
+                    run: (cell) => { this.deleteTableRow(cell); this.markTableChanged(); }
+                },
+                {
+                    id: 'delete-column',
+                    label: 'delete column',
+                    hint: 'Delete current column',
+                    run: (cell) => { this.deleteTableColumn(cell); this.markTableChanged(); }
+                },
+                {
+                    id: 'merge-selected-cells',
+                    label: 'merge selected cells',
+                    hint: 'Merge Alt-selected cell range',
+                    run: () => this.mergeSelectedTableCells()
+                },
+                {
+                    id: 'clear-selected-cells',
+                    label: 'clear selected cells',
+                    hint: 'Clear Alt-selection highlight',
+                    run: () => this.clearTableSelection()
+                },
+                {
+                    id: 'merge-right',
+                    label: 'merge with right cell',
+                    hint: 'Merge current cell with right cell',
+                    run: (cell) => this.mergeCellWithRight(cell)
+                },
+                {
+                    id: 'merge-below',
+                    label: 'merge with cell below',
+                    hint: 'Merge current cell with cell below',
+                    run: (cell) => this.mergeCellWithBelow(cell)
+                },
+                {
+                    id: 'split-merged-cell',
+                    label: 'split merged cell',
+                    hint: 'Split merged cell into normal cells',
+                    run: (cell) => this.splitMergedCell(cell)
+                },
+                {
+                    id: 'duplicate-right',
+                    label: 'duplicate right',
+                    hint: 'Duplicate current cell to the right',
+                    run: (cell) => this.duplicateCellContent(cell, 'right')
+                },
+                {
+                    id: 'duplicate-below',
+                    label: 'duplicate below',
+                    hint: 'Duplicate current cell below',
+                    run: (cell) => this.duplicateCellContent(cell, 'below')
+                },
+                {
+                    id: 'cell-background-color',
+                    label: 'cell background color',
+                    hint: 'Pick cell background color',
+                    run: (cell) => this.pickTableCellColor(cell)
+                },
+                {
+                    id: 'cell-background-hex',
+                    label: 'cell background hex',
+                    hint: 'Set cell background using hex',
+                    run: (cell) => this.promptTableCellColor(cell)
+                },
+                {
+                    id: 'clear-cell-background',
+                    label: 'clear cell background',
+                    hint: 'Remove cell background color',
+                    run: (cell) => this.clearTableCellColor(cell)
+                },
+                {
+                    id: 'column-width-plus',
+                    label: 'column width +',
+                    hint: 'Increase column width',
+                    run: (cell) => this.adjustTableColumnWidth(cell, 20)
+                },
+                {
+                    id: 'column-width-minus',
+                    label: 'column width -',
+                    hint: 'Decrease column width',
+                    run: (cell) => this.adjustTableColumnWidth(cell, -20)
+                },
+                {
+                    id: 'row-height-plus',
+                    label: 'row height +',
+                    hint: 'Increase row height',
+                    run: (cell) => this.adjustTableRowHeight(cell, 10)
+                },
+                {
+                    id: 'row-height-minus',
+                    label: 'row height -',
+                    hint: 'Decrease row height',
+                    run: (cell) => this.adjustTableRowHeight(cell, -10)
+                },
+                {
+                    id: 'cell-padding-plus',
+                    label: 'cell padding +',
+                    hint: 'Increase cell padding',
+                    run: (cell) => this.adjustTableCellPadding(cell, 2)
+                },
+                {
+                    id: 'cell-padding-minus',
+                    label: 'cell padding -',
+                    hint: 'Decrease cell padding',
+                    run: (cell) => this.adjustTableCellPadding(cell, -2)
+                },
+                {
+                    id: 'row-background-color',
+                    label: 'row background color',
+                    hint: 'Pick row background color',
+                    run: (cell) => this.pickTableRowColor(cell)
+                },
+                {
+                    id: 'column-background-color',
+                    label: 'column background color',
+                    hint: 'Pick column background color',
+                    run: (cell) => this.pickTableColumnColor(cell)
+                },
+                {
+                    id: 'table-background-color',
+                    label: 'table background color',
+                    hint: 'Pick whole table background color',
+                    run: (cell) => this.pickWholeTableColor(cell)
+                },
+                {
+                    id: 'text-align-left',
+                    label: 'text align left',
+                    hint: 'Align cell text left',
+                    run: (cell) => this.setTableCellTextAlign(cell, 'left')
+                },
+                {
+                    id: 'text-align-center',
+                    label: 'text align center',
+                    hint: 'Align cell text center',
+                    run: (cell) => this.setTableCellTextAlign(cell, 'center')
+                },
+                {
+                    id: 'text-align-right',
+                    label: 'text align right',
+                    hint: 'Align cell text right',
+                    run: (cell) => this.setTableCellTextAlign(cell, 'right')
+                },
+                {
+                    id: 'align-row-center',
+                    label: 'align whole row center',
+                    hint: 'Center text for full row',
+                    run: (cell) => this.setTableRowTextAlign(cell, 'center')
+                },
+                {
+                    id: 'align-column-center',
+                    label: 'align whole column center',
+                    hint: 'Center text for full column',
+                    run: (cell) => this.setTableColumnTextAlign(cell, 'center')
+                },
+                {
+                    id: 'vertical-align-top',
+                    label: 'vertical align top',
+                    hint: 'Set vertical alignment to top',
+                    run: (cell) => this.setTableCellVerticalAlign(cell, 'top')
+                },
+                {
+                    id: 'vertical-align-middle',
+                    label: 'vertical align middle',
+                    hint: 'Set vertical alignment to middle',
+                    run: (cell) => this.setTableCellVerticalAlign(cell, 'middle')
+                },
+                {
+                    id: 'vertical-align-bottom',
+                    label: 'vertical align bottom',
+                    hint: 'Set vertical alignment to bottom',
+                    run: (cell) => this.setTableCellVerticalAlign(cell, 'bottom')
+                },
+                {
+                    id: 'border-color',
+                    label: 'border color',
+                    hint: 'Pick border color',
+                    run: (cell) => this.pickTableBorderColor(cell)
+                },
+                {
+                    id: 'border-width-plus',
+                    label: 'border width +',
+                    hint: 'Increase border width',
+                    run: (cell) => this.adjustTableAllBorders(cell, 1)
+                },
+                {
+                    id: 'border-width-minus',
+                    label: 'border width -',
+                    hint: 'Decrease border width',
+                    run: (cell) => this.adjustTableAllBorders(cell, -1)
+                },
+                {
+                    id: 'distribute-columns-evenly',
+                    label: 'distribute columns evenly',
+                    hint: 'Make all columns equal width',
+                    run: (cell) => this.distributeTableColumns(cell)
+                },
+                {
+                    id: 'table-layout-fixed',
+                    label: 'table layout fixed',
+                    hint: 'Set fixed table layout',
+                    run: (cell) => this.setTableLayoutFixed(cell, true)
+                },
+                {
+                    id: 'table-layout-auto',
+                    label: 'table layout auto',
+                    hint: 'Set automatic table layout',
+                    run: (cell) => this.setTableLayoutFixed(cell, false)
+                },
+                {
+                    id: 'delete-table',
+                    label: 'delete table',
+                    hint: 'Remove entire table block',
+                    run: (cell) => this.deleteTable(cell)
+                }
+            ];
+        },
+        getFilteredTableSlashCommands() {
+            const q = String(this.tableSlashQuery || '').trim().toLowerCase();
+            const list = this.getTableSlashCommands();
+            if (!q) return list;
+            return list.filter((cmd) => cmd.label.includes(q) || cmd.hint.toLowerCase().includes(q) || cmd.id.includes(q));
+        },
+        openTableSlashHelper(cell, initialQuery = '') {
+            if (!cell) return;
+            this.tableSlashCell = cell;
+            this.tableSlashQuery = String(initialQuery || '');
+            this.showTableSlashModal = true;
+            this.$nextTick(() => {
+                if (this.$refs.tableSlashInputRef) this.$refs.tableSlashInputRef.focus();
+            });
+        },
+        closeTableSlashHelper() {
+            this.showTableSlashModal = false;
+            this.tableSlashCell = null;
+            this.tableSlashQuery = '';
+        },
+        runTableSlashCommand(commandId = '') {
+            const cell = this.tableSlashCell;
+            if (!cell) {
+                this.closeTableSlashHelper();
+                return;
+            }
+            const id = String(commandId || '').trim().toLowerCase();
+            const filtered = this.getFilteredTableSlashCommands();
+            const cmd = id
+                ? filtered.find((entry) => entry.id === id || entry.label === id)
+                : filtered[0];
+            if (!cmd || typeof cmd.run !== 'function') return;
+            this.closeTableSlashHelper();
+            cmd.run(cell);
+        },
         bindWordLikeTableBehavior() {
             const holder = document.getElementById('editorjs');
             if (!holder) return;
@@ -1038,6 +1382,13 @@ async fetchMessages(roomId) {
             this._tableWordKeydownHandler = (event) => {
                 const key = String(event.key || '').toLowerCase();
                 const hasCtrl = !!(event.ctrlKey || event.metaKey);
+                if (this.showTableSlashModal) {
+                    if (key === 'escape') {
+                        event.preventDefault();
+                        this.closeTableSlashHelper();
+                    }
+                    return;
+                }
                 if (hasCtrl && !event.altKey && key === 'z') {
                     event.preventDefault();
                     if (event.shiftKey) this.redoEditor();
@@ -1053,8 +1404,13 @@ async fetchMessages(roomId) {
                     this.clearTableSelection();
                     return;
                 }
-                if (event.key !== 'Tab') return;
                 const cell = this.getEditorTableCellFromTarget(event.target);
+                if (!hasCtrl && !event.altKey && event.key === '/' && cell) {
+                    event.preventDefault();
+                    this.openTableSlashHelper(cell);
+                    return;
+                }
+                if (event.key !== 'Tab') return;
                 if (!cell) return;
                 event.preventDefault();
                 const moved = this.focusAdjacentTableCell(cell, event.shiftKey ? -1 : 1);
@@ -1142,6 +1498,7 @@ async fetchMessages(roomId) {
             this._tableColorPickHandler = null;
             this._isSelectingTableRange = false;
             this._tableSelectionAnchorCell = null;
+            this.closeTableSlashHelper();
             this.clearTableSelection();
             this.closeTableContextMenu();
         },
@@ -1399,6 +1756,67 @@ async fetchMessages(roomId) {
             if (!cell) return;
             cell.style.removeProperty('background');
             cell.style.removeProperty('background-color');
+            this.markTableChanged();
+        },
+        escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        },
+        openTableRadioBuilder(cell) {
+            if (!cell) return;
+            this.radioBuilderCell = cell;
+            this.radioBuilderForm = {
+                title: '',
+                optionsText: 'Option 1\nOption 2'
+            };
+            this.showRadioBuilderModal = true;
+            this.$nextTick(() => {
+                if (this.$refs.radioOptionsInputRef) this.$refs.radioOptionsInputRef.focus();
+            });
+        },
+        cancelTableRadioBuilder() {
+            this.showRadioBuilderModal = false;
+            this.radioBuilderCell = null;
+            this.radioBuilderForm = { title: '', optionsText: '' };
+        },
+        submitTableRadioBuilder() {
+            const cell = this.radioBuilderCell;
+            if (!cell) {
+                this.cancelTableRadioBuilder();
+                return;
+            }
+
+            const lines = String(this.radioBuilderForm.optionsText || '')
+                .split(/\r?\n/)
+                .map(v => v.trim())
+                .filter(Boolean);
+            if (lines.length === 0) {
+                this.showAlert('Radio buttons', 'Add at least one option.');
+                return;
+            }
+
+            const groupName = `ld-radio-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+            const title = String(this.radioBuilderForm.title || '').trim();
+            const titleHtml = title
+                ? `<div class="ld-table-radio-title">${this.escapeHtml(title)}</div>`
+                : '';
+            const optionsHtml = lines.map((label, idx) => (
+                `<label class="ld-table-radio-row"><input type="radio" class="ld-table-radio" name="${groupName}" value="${idx}"><span>${this.escapeHtml(label)}</span></label>`
+            )).join('');
+            const groupHtml = `<div class="ld-table-radio-group">${titleHtml}${optionsHtml}</div>`;
+
+            const current = String(cell.innerHTML || '').trim();
+            if (!current || current === '<br>') {
+                cell.innerHTML = groupHtml;
+            } else {
+                cell.innerHTML = `${current}<div><br></div>${groupHtml}`;
+            }
+
+            this.cancelTableRadioBuilder();
             this.markTableChanged();
         },
         getCellPixelSize(cell, axis, fallback) {
@@ -1771,6 +2189,24 @@ async fetchMessages(roomId) {
                 if (cell && cell.parentNode) cell.parentNode.removeChild(cell);
             });
         },
+        duplicateCellContent(referenceCell, direction) {
+            const pos = this.getTableCellPosition(referenceCell);
+            if (!pos) return;
+
+            let target = null;
+            if (direction === 'right') {
+                const row = pos.rows[pos.rIdx] || [];
+                target = row[pos.cIdx + 1] || null;
+            } else if (direction === 'below') {
+                const row = pos.rows[pos.rIdx + 1] || [];
+                target = row[pos.cIdx] || null;
+            }
+            if (!target) return;
+
+            target.innerHTML = referenceCell.innerHTML;
+            target.style.cssText = referenceCell.style.cssText;
+            this.markTableChanged();
+        },
         ensureTableContextMenu() {
             if (this._tableContextMenuEl) return;
             const menu = document.createElement('div');
@@ -1869,9 +2305,24 @@ async fetchMessages(roomId) {
                 this.splitMergedCell(this._tableMenuCell);
                 this.closeTableContextMenu();
             }));
+            menu.appendChild(makeButton('Duplicate cell to right', () => {
+                if (!this._tableMenuCell) return;
+                this.duplicateCellContent(this._tableMenuCell, 'right');
+                this.closeTableContextMenu();
+            }));
+            menu.appendChild(makeButton('Duplicate cell below', () => {
+                if (!this._tableMenuCell) return;
+                this.duplicateCellContent(this._tableMenuCell, 'below');
+                this.closeTableContextMenu();
+            }));
             menu.appendChild(makeButton('Cell background color...', () => {
                 if (!this._tableMenuCell) return;
                 this.pickTableCellColor(this._tableMenuCell);
+                this.closeTableContextMenu();
+            }));
+            menu.appendChild(makeButton('Insert radio group...', () => {
+                if (!this._tableMenuCell) return;
+                this.openTableRadioBuilder(this._tableMenuCell);
                 this.closeTableContextMenu();
             }));
             menu.appendChild(makeButton('Cell background hex...', () => {
