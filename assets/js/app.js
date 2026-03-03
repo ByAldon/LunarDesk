@@ -105,6 +105,7 @@ createApp({
         await this.fetchData();
         await this.fetchRooms();
         await this.fetchAdminMessages();
+        await this.restoreUiState();
         
         setInterval(() => this.fetchData(), 10000);
         setInterval(() => this.fetchRooms(), 3000);
@@ -119,6 +120,79 @@ createApp({
         window.addEventListener('mouseup', this.stopDrag);
     },
     methods: {
+        getUiStateStorageKey() {
+            return 'lunardesk_ui_state_v1';
+        },
+        loadUiState() {
+            try {
+                const raw = localStorage.getItem(this.getUiStateStorageKey());
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                return (parsed && typeof parsed === 'object') ? parsed : null;
+            } catch (e) {
+                return null;
+            }
+        },
+        saveUiState() {
+            try {
+                const state = {
+                    activeLeftTab: this.activeLeftTab === 'stream' ? 'stream' : 'terminal',
+                    activeRoomId: this.activeRoom && Number.isFinite(Number(this.activeRoom.id)) ? Number(this.activeRoom.id) : null,
+                    activePageId: this.activePage && Number.isFinite(Number(this.activePage.id)) ? Number(this.activePage.id) : null
+                };
+                localStorage.setItem(this.getUiStateStorageKey(), JSON.stringify(state));
+            } catch (e) {}
+        },
+        async restoreUiState() {
+            const state = this.loadUiState();
+            if (!state) return;
+
+            if (state.activeLeftTab === 'stream' || state.activeLeftTab === 'terminal') {
+                this.activeLeftTab = state.activeLeftTab;
+            }
+
+            if (Number.isFinite(Number(state.activeRoomId))) {
+                const room = this.rooms.find((r) => Number(r.id) === Number(state.activeRoomId));
+                if (room) {
+                    this.activeRoom = room;
+                    await this.fetchMessages(room.id);
+                }
+            }
+
+            if (Number.isFinite(Number(state.activePageId))) {
+                const page = this.items.find((i) => Number(i.id) === Number(state.activePageId));
+                if (page) {
+                    await this.selectDoc(page);
+                }
+            }
+        },
+        handleUnauthorized() {
+            this.showAlert('Session expired', 'Please log in again to continue editing.');
+            setTimeout(() => { window.location.href = 'auth.php'; }, 900);
+        },
+        async fetchJson(url, options = {}) {
+            const res = await fetch(url, options);
+            if (res.status === 401) {
+                this.handleUnauthorized();
+                throw new Error('Unauthorized');
+            }
+            let data = null;
+            try {
+                data = await res.json();
+            } catch (e) {
+                throw new Error('Invalid server response');
+            }
+            if (!res.ok) {
+                throw new Error((data && data.error) ? data.error : `Request failed (${res.status})`);
+            }
+            if (data && typeof data === 'object' && data.error) {
+                if (String(data.error).toLowerCase().includes('unauthorized') || String(data.error).toLowerCase().includes('session expired')) {
+                    this.handleUnauthorized();
+                }
+                throw new Error(data.error);
+            }
+            return data;
+        },
         focusTitleInput() {
             this.$nextTick(() => {
                 const input = this.$refs.pageTitleInput;
@@ -140,48 +214,58 @@ createApp({
                     if (el) el.scrollTop = el.scrollHeight;
                 });
             }
+            this.saveUiState();
         },
         async fetchUser() {
-            const r = await fetch('api.php?action=profile');
-            if (r.ok) this.currentUser = await r.json();
+            try {
+                this.currentUser = await this.fetchJson('api.php?action=profile');
+            } catch (e) {}
         },
         async fetchData() {
-            const r = await fetch('api.php');
-            const data = await r.json();
-            this.items = data;
-            if (this.activePage && !this.needsSave) {
-                const updated = data.find(i => i.id === this.activePage.id);
-                if (updated) {
-                    const useDraft = Number(updated.has_draft) === 1;
-                    const updatedHasDraft = useDraft ? 1 : 0;
-                    const updatedTitle = useDraft ? (updated.draft_title || updated.title) : updated.title;
-                    const updatedCover = useDraft
-                        ? (updated.draft_cover_image || updated.cover_image || '')
-                        : (updated.cover_image || '');
-                    const activeCover = this.activePage.cover_image || '';
-                    this.activePage.has_draft = updatedHasDraft;
-                    this.activePage.draft_title = updated.draft_title || '';
-                    this.activePage.draft_content = updated.draft_content || '';
-                    this.activePage.draft_cover_image = updated.draft_cover_image || '';
-                    if (updatedTitle !== this.activePage.title || updated.is_public !== this.activePage.is_public || updatedCover !== activeCover) {
-                    this.activePage.title = updatedTitle;
-                    this.activePage.is_public = updated.is_public;
-                    this.activePage.cover_image = updatedCover;
+            try {
+                const data = await this.fetchJson('api.php');
+                if (!Array.isArray(data)) return;
+                this.items = data;
+                if (this.activePage && !this.needsSave) {
+                    const updated = data.find(i => i.id === this.activePage.id);
+                    if (updated) {
+                        const useDraft = Number(updated.has_draft) === 1;
+                        const updatedHasDraft = useDraft ? 1 : 0;
+                        const updatedTitle = useDraft ? (updated.draft_title || updated.title) : updated.title;
+                        const updatedCover = useDraft
+                            ? (updated.draft_cover_image || updated.cover_image || '')
+                            : (updated.cover_image || '');
+                        const activeCover = this.activePage.cover_image || '';
+                        this.activePage.has_draft = updatedHasDraft;
+                        this.activePage.draft_title = updated.draft_title || '';
+                        this.activePage.draft_content = updated.draft_content || '';
+                        this.activePage.draft_cover_image = updated.draft_cover_image || '';
+                        if (updatedTitle !== this.activePage.title || updated.is_public !== this.activePage.is_public || updatedCover !== activeCover) {
+                        this.activePage.title = updatedTitle;
+                        this.activePage.is_public = updated.is_public;
+                        this.activePage.cover_image = updatedCover;
+                        }
                     }
                 }
+            } catch (e) {
+                if (!Array.isArray(this.items)) this.items = [];
             }
         },
         async fetchRooms() {
-            const r = await fetch('api.php?action=rooms');
-            this.rooms = await r.json();
-            if (this.activeRoom) {
-                await this.fetchMessages(this.activeRoom.id);
+            try {
+                const data = await this.fetchJson('api.php?action=rooms');
+                this.rooms = Array.isArray(data) ? data : [];
+                if (this.activeRoom) {
+                    await this.fetchMessages(this.activeRoom.id);
+                }
+            } catch (e) {
+                this.rooms = [];
             }
         },
 async fetchMessages(roomId) {
             try {
-                const res = await fetch(`api.php?action=messages&room_id=${roomId}`);
-                const data = await res.json();
+                const data = await this.fetchJson(`api.php?action=messages&room_id=${roomId}`);
+                if (!Array.isArray(data)) return;
                 const oldLen = this.roomMessages ? this.roomMessages.length : 0;
                 this.roomMessages = data;
 
@@ -201,9 +285,8 @@ async fetchMessages(roomId) {
         
         async fetchAdminMessages() {
             try {
-                const res = await fetch(`api.php?action=admin_terminal&t=${Date.now()}`, { cache: 'no-store' });
-                if (!res.ok) return;
-                const data = await res.json();
+                const data = await this.fetchJson(`api.php?action=admin_terminal&t=${Date.now()}`, { cache: 'no-store' });
+                if (!Array.isArray(data)) return;
                 const oldLen = this.adminMessages ? this.adminMessages.length : 0;
                 this.adminMessages = data;
 
@@ -222,6 +305,7 @@ async fetchMessages(roomId) {
         },
         selectRoom(room) {
             this.activeRoom = room;
+            this.saveUiState();
             this.fetchRooms();
         },
         async selectDoc(page) {
@@ -326,6 +410,7 @@ async fetchMessages(roomId) {
                 });
             }, 100);
             this.loading = false;
+            this.saveUiState();
         },
         async autoSave() {
             if (!this.activePage || !globalEditorInstance || this.isPublishing) return;
@@ -339,7 +424,7 @@ async fetchMessages(roomId) {
                 const raw = await this.getEditorOutput();
                 const str = JSON.stringify(raw);
                 if (str !== this.lastSavedContent || this.activePage.title !== this.lastSavedTitle || this.activePage.is_public !== this.lastSavedPublic || this.activePage.cover_image !== this.lastSavedCover) {
-                    await fetch('api.php', {
+                    await this.fetchJson('api.php', {
                         method: 'PUT',
                         body: JSON.stringify({ ...this.activePage, content: str, action: 'draft' })
                     });
@@ -358,7 +443,8 @@ async fetchMessages(roomId) {
                         this.items[idx].draft_cover_image = this.activePage.cover_image;
                     }
                 }
-            } catch (e) { 
+            } catch (e) {
+                this.needsSave = true;
             } finally {
                 this.saveInFlight = false;
                 if (this.pendingAutoSave && !this.isPublishing) {
@@ -381,13 +467,10 @@ async fetchMessages(roomId) {
                     const raw = await this.getEditorOutput();
                     const str = JSON.stringify(raw);
                     const publishCover = this.activePage.draft_cover_image || this.activePage.cover_image || '';
-                    const publishRes = await fetch('api.php', {
+                    await this.fetchJson('api.php', {
                         method: 'PUT',
                         body: JSON.stringify({ ...this.activePage, cover_image: publishCover, content: str, action: 'publish' })
                     });
-                    if (!publishRes.ok) {
-                        throw new Error(`Publish failed (${publishRes.status})`);
-                    }
                     this.activePage.cover_image = publishCover;
                     this.lastSavedContent = str; this.lastSavedTitle = this.activePage.title; this.lastSavedPublic = this.activePage.is_public; 
                     this.lastSavedCover = publishCover; this.lastSaveTime = this.getFormattedDateTime(); this.needsSave = false; this.activePage.has_draft = 0; 
@@ -441,6 +524,7 @@ async fetchMessages(roomId) {
                 this.loading = true; 
                 await fetch(`api.php?id=${id}`, { method: 'DELETE' });
                 if (this.activePage && this.activePage.id === id) this.activePage = null;
+                this.saveUiState();
                 await this.fetchData(); 
                 this.loading = false;
             });
@@ -1156,13 +1240,20 @@ async fetchMessages(roomId) {
             const input = document.createElement('input');
             input.type = 'color';
             input.style.position = 'fixed';
-            input.style.left = '-9999px';
-            input.style.top = '0';
-            input.addEventListener('input', () => {
+            input.style.left = '8px';
+            input.style.top = '8px';
+            input.style.width = '1px';
+            input.style.height = '1px';
+            input.style.opacity = '0';
+            input.style.pointerEvents = 'none';
+            input.style.zIndex = '-1';
+            const emitPickedColor = () => {
                 if (typeof this._tableColorPickHandler === 'function') {
                     this._tableColorPickHandler(input.value);
                 }
-            });
+            };
+            input.addEventListener('input', emitPickedColor);
+            input.addEventListener('change', emitPickedColor);
             document.body.appendChild(input);
             this._tableColorInput = input;
             return input;
@@ -1171,18 +1262,54 @@ async fetchMessages(roomId) {
             const input = this.ensureTableColorInput();
             this._tableColorPickHandler = onPick;
             input.value = this.toHexColor(initialHex || '#ffffff');
-            input.click();
+            try {
+                if (typeof input.showPicker === 'function') {
+                    input.showPicker();
+                } else {
+                    input.click();
+                }
+            } catch (e) {
+                input.click();
+            }
         },
         pickTableCellColor(cell) {
             if (!cell) return;
             this.pickColor(cell.style.backgroundColor || '#ffffff', (hex) => {
-                cell.style.backgroundColor = hex;
+                this.setCellBackgroundColor(cell, hex);
+                this.markTableChanged();
+            });
+        },
+        setCellBackgroundColor(cell, color) {
+            if (!cell) return;
+            cell.style.setProperty('background-color', color, 'important');
+            cell.style.setProperty('background', color, 'important');
+        },
+        normalizeHexColor(value) {
+            const raw = String(value || '').trim();
+            if (!raw) return null;
+            const withHash = raw.startsWith('#') ? raw : `#${raw}`;
+            if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(withHash)) return null;
+            if (withHash.length === 4) {
+                return `#${withHash[1]}${withHash[1]}${withHash[2]}${withHash[2]}${withHash[3]}${withHash[3]}`.toLowerCase();
+            }
+            return withHash.toLowerCase();
+        },
+        promptTableCellColor(cell) {
+            if (!cell) return;
+            this.showPrompt('Cell color (hex)', 'Hex color', (val) => {
+                const hex = this.normalizeHexColor(val);
+                if (!hex) {
+                    this.showAlert('Invalid color', 'Use a hex value like #ffcc00 or ffcc00.');
+                    return;
+                }
+                this.setCellBackgroundColor(cell, hex);
                 this.markTableChanged();
             });
         },
         clearTableCellColor(cell) {
             if (!cell) return;
-            cell.style.backgroundColor = '';
+            cell.style.removeProperty('background');
+            cell.style.removeProperty('background-color');
             this.markTableChanged();
         },
         getCellPixelSize(cell, axis, fallback) {
@@ -1437,21 +1564,21 @@ async fetchMessages(roomId) {
         pickTableRowColor(referenceCell) {
             if (!referenceCell) return;
             this.pickColor(referenceCell.style.backgroundColor || '#ffffff', (hex) => {
-                this.applyStyleToTableRow(referenceCell, (cell) => { cell.style.backgroundColor = hex; });
+                this.applyStyleToTableRow(referenceCell, (cell) => { this.setCellBackgroundColor(cell, hex); });
                 this.markTableChanged();
             });
         },
         pickTableColumnColor(referenceCell) {
             if (!referenceCell) return;
             this.pickColor(referenceCell.style.backgroundColor || '#ffffff', (hex) => {
-                this.applyStyleToTableColumn(referenceCell, (cell) => { cell.style.backgroundColor = hex; });
+                this.applyStyleToTableColumn(referenceCell, (cell) => { this.setCellBackgroundColor(cell, hex); });
                 this.markTableChanged();
             });
         },
         pickWholeTableColor(referenceCell) {
             if (!referenceCell) return;
             this.pickColor(referenceCell.style.backgroundColor || '#ffffff', (hex) => {
-                this.applyStyleToWholeTable(referenceCell, (cell) => { cell.style.backgroundColor = hex; });
+                this.applyStyleToWholeTable(referenceCell, (cell) => { this.setCellBackgroundColor(cell, hex); });
                 this.markTableChanged();
             });
         },
@@ -1658,6 +1785,11 @@ async fetchMessages(roomId) {
                 this.pickTableCellColor(this._tableMenuCell);
                 this.closeTableContextMenu();
             }));
+            menu.appendChild(makeButton('Cell background hex...', () => {
+                if (!this._tableMenuCell) return;
+                this.promptTableCellColor(this._tableMenuCell);
+                this.closeTableContextMenu();
+            }));
             menu.appendChild(makeButton('Clear cell background', () => {
                 if (!this._tableMenuCell) return;
                 this.clearTableCellColor(this._tableMenuCell);
@@ -1831,7 +1963,7 @@ async fetchMessages(roomId) {
                     row.forEach((cell, cIdx) => {
                         const colorKey = `${rIdx}-${cIdx}`;
                         const color = colors[colorKey];
-                        if (color) cell.style.backgroundColor = color;
+                        if (color) this.setCellBackgroundColor(cell, color);
 
                         const pad = paddings[colorKey];
                         if (pad) cell.style.padding = String(pad);
