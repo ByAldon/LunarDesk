@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 // index.php
 require_once 'auth.php';
 include 'version.php';
@@ -208,6 +208,20 @@ include 'version.php';
                             </div>
                             
                             <div class="flex items-center gap-3">
+                                <button
+                                    @click="undoEditor"
+                                    :disabled="!canUndo"
+                                    class="bg-slate-700 hover:bg-slate-600 disabled:hover:bg-slate-700 text-white px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md border border-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    Undo
+                                </button>
+                                <button
+                                    @click="redoEditor"
+                                    :disabled="!canRedo"
+                                    class="bg-slate-700 hover:bg-slate-600 disabled:hover:bg-slate-700 text-white px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md border border-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    Redo
+                                </button>
                                 <label class="flex items-center text-[10px] font-black uppercase text-slate-300 gap-3 cursor-pointer hover:text-white transition-colors bg-slate-700/60 px-4 py-3 rounded-xl border border-slate-600">
                                     <span>Live</span>
                                     <input type="checkbox" v-model="activePage.is_public" @change="autoSave" :true-value="1" :false-value="0" class="accent-blue-500 w-5 h-5 rounded-md cursor-pointer">
@@ -375,11 +389,11 @@ include 'version.php';
         </div>
 
         <footer class="shrink-0 h-14 flex items-center justify-between px-10 bg-slate-900 border-t border-slate-800 z-30 relative">
-            <span class="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">LunarDesk &bull; <?php echo $app_version; ?></span>
+            <span class="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">LunarDesk &bull; <?php echo $app_version; ?> <br> Timezone is <a href="https://time.is/UTC" target="_blank">UTC</a></span>
             <span class="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">2026 &copy; Ported by <a href="https://github.com/ByAldon" target="_blank" class="hover:text-blue-400 transition-colors">Aldon</a></span>
         </footer>
 
     </div>
-    <script src="assets/js/app.js"></script>
+    <script src="assets/js/app.js?v=<?php echo urlencode($app_version); ?>"></script>
 </body>
 </html>

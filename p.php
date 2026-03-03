@@ -115,7 +115,7 @@ $metaText = implode(' ', $metaParts);
         </div>
         
         <div class="mt-auto p-6 border-t border-slate-700/50 bg-slate-900/40">
-            <span class="block text-[9px] text-slate-500 font-black uppercase tracking-[0.3em] mb-2">LunarDesk &bull; <?php echo $app_version; ?></span>
+            <span class="block text-[9px] text-slate-500 font-black uppercase tracking-[0.3em] mb-2">LunarDesk &bull; <?php echo $app_version; ?> <br> Timezone is <a href="https://time.is/UTC" target="_blank">UTC</a></span>
             <span class="block text-[9px] text-slate-500 font-black uppercase tracking-[0.3em]">2026 &copy; Ported by <a href="https://github.com/ByAldon" target="_blank" class="hover:text-blue-400 transition-colors">Aldon</a></span>
         </div>
     </aside>

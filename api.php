@@ -342,36 +342,48 @@ try {
             $newPublic = isset($input['is_public']) ? (int)$input['is_public'] : 0;
             $newCover = $input['cover_image'] ?? '';
             $actionType = $input['action'] ?? 'draft';
+            $isSameAsPublished =
+                (string)($existing['title'] ?? '') === (string)$newTitle &&
+                (string)($existing['content'] ?? '') === (string)$newContent &&
+                (string)($existing['cover_image'] ?? '') === (string)$newCover &&
+                (int)($existing['is_public'] ?? 0) === $newPublic;
 
             if ($actionType === 'publish') {
                 $hasChanges =
                     (string)($existing['title'] ?? '') !== (string)$newTitle ||
                     (string)($existing['content'] ?? '') !== (string)$newContent ||
                     (string)($existing['cover_image'] ?? '') !== (string)$newCover ||
+                    (string)($existing['draft_title'] ?? '') !== (string)$newTitle ||
+                    (string)($existing['draft_content'] ?? '') !== (string)$newContent ||
+                    (string)($existing['draft_cover_image'] ?? '') !== (string)$newCover ||
                     (int)($existing['is_public'] ?? 0) !== $newPublic ||
                     (int)($existing['has_draft'] ?? 0) !== 0;
 
                 if ($hasChanges) {
-                    $stmt = $db->prepare("UPDATE items SET title = :t, content = :c, cover_image = :cov, has_draft = 0, is_public = :p, updated_at = CURRENT_TIMESTAMP, updated_by = :uid WHERE id = :id");
+                    $stmt = $db->prepare("UPDATE items SET title = :t, content = :c, cover_image = :cov, draft_title = :t, draft_content = :c, draft_cover_image = :cov, has_draft = 0, is_public = :p, updated_at = CURRENT_TIMESTAMP, updated_by = :uid WHERE id = :id");
                 } else {
-                    $stmt = $db->prepare("UPDATE items SET title = :t, content = :c, cover_image = :cov, has_draft = 0, is_public = :p WHERE id = :id");
+                    $stmt = $db->prepare("UPDATE items SET title = :t, content = :c, cover_image = :cov, draft_title = :t, draft_content = :c, draft_cover_image = :cov, has_draft = 0, is_public = :p WHERE id = :id");
                 }
             } else {
+                $targetHasDraft = $isSameAsPublished ? 0 : 1;
                 $hasChanges =
                     (string)($existing['draft_title'] ?? '') !== (string)$newTitle ||
                     (string)($existing['draft_content'] ?? '') !== (string)$newContent ||
                     (string)($existing['draft_cover_image'] ?? '') !== (string)$newCover ||
                     (int)($existing['is_public'] ?? 0) !== $newPublic ||
-                    (int)($existing['has_draft'] ?? 0) !== 1;
+                    (int)($existing['has_draft'] ?? 0) !== $targetHasDraft;
 
                 if ($hasChanges) {
-                    $stmt = $db->prepare("UPDATE items SET draft_title = :t, draft_content = :c, draft_cover_image = :cov, has_draft = 1, is_public = :p, updated_at = CURRENT_TIMESTAMP, updated_by = :uid WHERE id = :id");
+                    $stmt = $db->prepare("UPDATE items SET draft_title = :t, draft_content = :c, draft_cover_image = :cov, has_draft = :hd, is_public = :p, updated_at = CURRENT_TIMESTAMP, updated_by = :uid WHERE id = :id");
                 } else {
-                    $stmt = $db->prepare("UPDATE items SET draft_title = :t, draft_content = :c, draft_cover_image = :cov, has_draft = 1, is_public = :p WHERE id = :id");
+                    $stmt = $db->prepare("UPDATE items SET draft_title = :t, draft_content = :c, draft_cover_image = :cov, has_draft = :hd, is_public = :p WHERE id = :id");
                 }
             }
 
             $params = [':t'=>$newTitle, ':c'=>$newContent, ':p'=>$newPublic, ':id'=>$input['id'], ':cov'=>$newCover];
+            if ($actionType !== 'publish') {
+                $params[':hd'] = $targetHasDraft;
+            }
             if ($hasChanges) {
                 $params[':uid'] = $_SESSION['user_id'];
             }
