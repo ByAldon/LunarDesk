@@ -55,8 +55,8 @@ include 'version.php';
                     aria-label="Open menu"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11.983 3.5a1.9 1.9 0 011.786 1.257l.143.393a1.9 1.9 0 002.24 1.183l.411-.083a1.9 1.9 0 012.09 2.09l-.083.411a1.9 1.9 0 001.183 2.24l.393.143a1.9 1.9 0 010 3.572l-.393.143a1.9 1.9 0 00-1.183 2.24l.083.411a1.9 1.9 0 01-2.09 2.09l-.411-.083a1.9 1.9 0 00-2.24 1.183l-.143.393a1.9 1.9 0 01-3.572 0l-.143-.393a1.9 1.9 0 00-2.24-1.183l-.411.083a1.9 1.9 0 01-2.09-2.09l.083-.411a1.9 1.9 0 00-1.183-2.24l-.393-.143a1.9 1.9 0 010-3.572l.393-.143a1.9 1.9 0 001.183-2.24l-.083-.411a1.9 1.9 0 012.09-2.09l.411.083a1.9 1.9 0 002.24-1.183l.143-.393A1.9 1.9 0 0111.983 3.5z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.5 4.75h3l.5 1.8a5.9 5.9 0 011.27.74l1.72-.68 2.12 2.12-.68 1.72c.28.4.53.83.74 1.27l1.8.5v3l-1.8.5a5.9 5.9 0 01-.74 1.27l.68 1.72-2.12 2.12-1.72-.68a5.9 5.9 0 01-1.27.74l-.5 1.8h-3l-.5-1.8a5.9 5.9 0 01-1.27-.74l-1.72.68-2.12-2.12.68-1.72a5.9 5.9 0 01-.74-1.27l-1.8-.5v-3l1.8-.5c.2-.44.46-.87.74-1.27l-.68-1.72 2.12-2.12 1.72.68c.4-.28.83-.53 1.27-.74l.5-1.8z" />
+                        <circle cx="12" cy="12" r="3.1" stroke-width="2" />
                     </svg>
                 </button>
                 <div
@@ -428,8 +428,9 @@ include 'version.php';
                             <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">10. Update Check and Content Recovery</h3>
                             <p>After an update, it is possible that existing content does not render correctly in some pages. Always check your important pages manually after updating.</p>
                             <p class="mt-2">If content is broken after an update, verify the page state and recreate the affected content manually.</p>
+                            <p class="mt-2 text-slate-300"><strong>This guidance applies to all users.</strong></p>
                             <p class="mt-2"><strong>Admin note:</strong> In most cases, deleting the database file is not required. If problems continue, check carefully first. Only if it is truly necessary, remove the database file so the system can create a new one.</p>
-                            <p class="mt-2 text-slate-400">This maintenance information is intended for administrators and is generally not needed for regular users.</p>
+                            <p class="mt-2 text-slate-400">The database maintenance note above is intended for administrators and is generally not needed for regular users.</p>
                         </section>
                     </div>
 
