@@ -126,6 +126,9 @@ include 'version.php';
                             <div class="flex justify-between items-center group mb-4 px-2">
                                 <span class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{{ space.title }}</span>
                                 <div class="hidden group-hover:flex items-center gap-2">
+                                    <button @click.stop="moveItem(space, 'up', 'space')" class="text-slate-400 hover:text-blue-400 text-base leading-none transition-colors px-1">↑</button>
+                                    <button @click.stop="moveItem(space, 'down', 'space')" class="text-slate-400 hover:text-blue-400 text-base leading-none transition-colors px-1">↓</button>
+                                    <button @click.stop="renameSpace(space)" class="text-slate-400 hover:text-white transition-colors px-1">✎</button>
                                     <button @click.stop="createItem('page', space.id)" class="text-slate-200 hover:text-white bg-slate-700/70 hover:bg-blue-600/30 transition-colors text-lg leading-none px-2 rounded-md">+</button>
                                     <button @click.stop="confirmDelete(space.id, 'space')" class="text-slate-400 hover:text-red-400 transition-colors">x</button>
                                 </div>

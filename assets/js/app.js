@@ -97,7 +97,8 @@ createApp({
             confirmDialog: { show: false, title: '', message: '', onConfirm: null },
             editorHistory: [],
             editorHistoryIndex: -1,
-            historyBusy: false
+            historyBusy: false,
+            editorSessionKey: 0
         }
     },
     async created() {
@@ -309,7 +310,10 @@ async fetchMessages(roomId) {
             this.fetchRooms();
         },
         async selectDoc(page) {
+            const sessionKey = this.editorSessionKey + 1;
+            this.editorSessionKey = sessionKey;
             this.loading = true;
+            this.pendingAutoSave = false;
             this.activePage = { ...page };
             const useDraft = Number(page.has_draft) === 1;
             this.activePage.title = useDraft ? (page.draft_title || page.title) : page.title;
@@ -336,6 +340,7 @@ async fetchMessages(roomId) {
             }
 
             setTimeout(() => {
+                if (this.editorSessionKey !== sessionKey) return;
                 const initialData = this.lastSavedContent ? JSON.parse(this.lastSavedContent) : { blocks: [] };
                 const HeaderToolClass = window.Header || window.EditorjsHeader;
                 const ParagraphToolClass = window.Paragraph;
@@ -397,11 +402,13 @@ async fetchMessages(roomId) {
                         }
                     },
                     onReady: () => {
+                        if (this.editorSessionKey !== sessionKey) return;
                         this.applyTableStylesFromData(initialData);
                         this.bindWordLikeTableBehavior();
                         this.resetEditorHistory(initialData);
                     },
                     onChange: () => {
+                        if (this.editorSessionKey !== sessionKey) return;
                         if (this._isRestoringHistory) return;
                         this.needsSave = true;
                         this.autoSave();
@@ -419,37 +426,44 @@ async fetchMessages(roomId) {
                 return;
             }
 
+            const sessionKey = this.editorSessionKey;
+            const pageSnapshot = { ...this.activePage };
+            const pageId = Number(pageSnapshot.id);
             this.saveInFlight = true;
             try {
                 const raw = await this.getEditorOutput();
+                if (this.editorSessionKey !== sessionKey || !this.activePage || Number(this.activePage.id) !== pageId) return;
                 const str = JSON.stringify(raw);
-                if (str !== this.lastSavedContent || this.activePage.title !== this.lastSavedTitle || this.activePage.is_public !== this.lastSavedPublic || this.activePage.cover_image !== this.lastSavedCover) {
+                if (str !== this.lastSavedContent || pageSnapshot.title !== this.lastSavedTitle || pageSnapshot.is_public !== this.lastSavedPublic || pageSnapshot.cover_image !== this.lastSavedCover) {
                     await this.fetchJson('api.php', {
                         method: 'PUT',
-                        body: JSON.stringify({ ...this.activePage, content: str, action: 'draft' })
+                        body: JSON.stringify({ ...pageSnapshot, content: str, action: 'draft' })
                     });
+                    if (this.editorSessionKey !== sessionKey || !this.activePage || Number(this.activePage.id) !== pageId) return;
                     this.lastSavedContent = str;
-                    this.lastSavedTitle = this.activePage.title;
-                    this.lastSavedPublic = this.activePage.is_public;
-                    this.lastSavedCover = this.activePage.cover_image;
+                    this.lastSavedTitle = pageSnapshot.title;
+                    this.lastSavedPublic = pageSnapshot.is_public;
+                    this.lastSavedCover = pageSnapshot.cover_image;
                     this.lastSaveTime = this.getFormattedDateTime();
                     this.needsSave = false;
                     this.activePage.has_draft = 1;
                     const idx = this.items.findIndex(i => i.id === this.activePage.id);
                     if (idx !== -1) {
                         this.items[idx].has_draft = 1;
-                        this.items[idx].draft_title = this.activePage.title;
+                        this.items[idx].draft_title = pageSnapshot.title;
                         this.items[idx].draft_content = str;
-                        this.items[idx].draft_cover_image = this.activePage.cover_image;
+                        this.items[idx].draft_cover_image = pageSnapshot.cover_image;
                     }
                 }
             } catch (e) {
                 this.needsSave = true;
             } finally {
                 this.saveInFlight = false;
-                if (this.pendingAutoSave && !this.isPublishing) {
+                if (this.pendingAutoSave && !this.isPublishing && this.editorSessionKey === sessionKey) {
                     this.pendingAutoSave = false;
                     this.autoSave();
+                } else if (this.editorSessionKey !== sessionKey) {
+                    this.pendingAutoSave = false;
                 }
             }
         },
@@ -461,18 +475,24 @@ async fetchMessages(roomId) {
         async manualPublish() {
             this.loading = true;
             this.isPublishing = true;
+            const sessionKey = this.editorSessionKey;
+            const pageId = this.activePage ? Number(this.activePage.id) : null;
             try {
                 await this.waitForSaveIdle();
+                if (this.editorSessionKey !== sessionKey || !this.activePage || Number(this.activePage.id) !== pageId) return;
                 if (globalEditorInstance) {
+                    const pageSnapshot = { ...this.activePage };
                     const raw = await this.getEditorOutput();
+                    if (this.editorSessionKey !== sessionKey || !this.activePage || Number(this.activePage.id) !== pageId) return;
                     const str = JSON.stringify(raw);
-                    const publishCover = this.activePage.draft_cover_image || this.activePage.cover_image || '';
+                    const publishCover = pageSnapshot.draft_cover_image || pageSnapshot.cover_image || '';
                     await this.fetchJson('api.php', {
                         method: 'PUT',
-                        body: JSON.stringify({ ...this.activePage, cover_image: publishCover, content: str, action: 'publish' })
+                        body: JSON.stringify({ ...pageSnapshot, cover_image: publishCover, content: str, action: 'publish' })
                     });
+                    if (this.editorSessionKey !== sessionKey || !this.activePage || Number(this.activePage.id) !== pageId) return;
                     this.activePage.cover_image = publishCover;
-                    this.lastSavedContent = str; this.lastSavedTitle = this.activePage.title; this.lastSavedPublic = this.activePage.is_public; 
+                    this.lastSavedContent = str; this.lastSavedTitle = pageSnapshot.title; this.lastSavedPublic = pageSnapshot.is_public; 
                     this.lastSavedCover = publishCover; this.lastSaveTime = this.getFormattedDateTime(); this.needsSave = false; this.activePage.has_draft = 0; 
                     const idx = this.items.findIndex(i => i.id === this.activePage.id);
                     if (idx !== -1) this.items[idx].has_draft = 0;
@@ -579,12 +599,21 @@ async fetchMessages(roomId) {
             }
         },
         async moveItem(item, direction, listType, parentId) {
-            const expectedType = listType === 'subpage' ? 'subpage' : 'page';
-            if (item.type !== expectedType || item.parent_id !== parentId) return;
-
-            const currentList = expectedType === 'page'
-                ? this.getPages(parentId)
-                : this.getSubpages(parentId);
+            let expectedType = 'page';
+            let currentList = [];
+            if (listType === 'space') {
+                expectedType = 'space';
+                currentList = [...this.spaces];
+            } else if (listType === 'subpage') {
+                expectedType = 'subpage';
+                if (item.parent_id !== parentId) return;
+                currentList = this.getSubpages(parentId);
+            } else {
+                expectedType = 'page';
+                if (item.parent_id !== parentId) return;
+                currentList = this.getPages(parentId);
+            }
+            if (item.type !== expectedType) return;
 
             const currentIndex = currentList.findIndex(i => i.id === item.id);
             if (currentIndex === -1) return;
@@ -615,6 +644,33 @@ async fetchMessages(roomId) {
                 await this.fetchData();
                 this.loading = false;
             });
+        },
+        renameSpace(space) {
+            if (!space || Number(space.id) <= 0) return;
+            this.showPrompt("Rename Space", "Space Name", async (val) => {
+                const nextTitle = String(val || '').trim();
+                if (!nextTitle) return;
+                this.loading = true;
+                try {
+                    await this.fetchJson('api.php', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id: Number(space.id),
+                            title: nextTitle,
+                            content: String(space.content || ''),
+                            cover_image: String(space.cover_image || ''),
+                            is_public: Number(space.is_public) === 1 ? 1 : 0,
+                            action: 'publish'
+                        })
+                    });
+                    await this.fetchData();
+                } catch (e) {
+                    this.showAlert('Rename Error', 'Could not rename this space.');
+                } finally {
+                    this.loading = false;
+                }
+            }, String(space.title || ''));
         },
         createRoom() {
             this.showPrompt("Initialize Channel", "Channel Name", async (val) => {
@@ -2118,9 +2174,9 @@ async fetchMessages(roomId) {
                 this.confirmDialog.show = false;
             }
         },
-        showPrompt(title, label, onConfirm) {
+        showPrompt(title, label, onConfirm, initialValue = '') {
             this.promptTitle = title;
-            this.promptInput = '';
+            this.promptInput = String(initialValue || '');
             this.promptAction = onConfirm;
             this.showPromptModal = true;
             this.$nextTick(() => {
@@ -2144,7 +2200,13 @@ async fetchMessages(roomId) {
             return this.editorHistoryIndex >= 0 && this.editorHistoryIndex < (this.editorHistory.length - 1) && !this.historyBusy;
         },
         spaces() {
-            return this.items.filter(i => i.type === 'space');
+            return this.items
+                .filter(i => i.type === 'space')
+                .sort((a, b) => {
+                    const ao = Number.isFinite(Number(a.sort_order)) ? Number(a.sort_order) : 0;
+                    const bo = Number.isFinite(Number(b.sort_order)) ? Number(b.sort_order) : 0;
+                    return ao - bo || a.id - b.id;
+                });
         }
     }
 }).mount('#app');
