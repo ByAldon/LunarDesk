@@ -49,7 +49,9 @@ if (!empty($metaActor)) $metaParts[] = 'by ' . $metaActor;
 $metaText = implode(' ', $metaParts);
 
 $publicChildrenByParent = [];
+$itemsById = [];
 foreach ($items as $item) {
+    $itemsById[(int)($item['id'] ?? 0)] = $item;
     if ((int)($item['is_public'] ?? 0) !== 1) continue;
     $parentId = (int)($item['parent_id'] ?? 0);
     if (!isset($publicChildrenByParent[$parentId])) {
@@ -57,6 +59,24 @@ foreach ($items as $item) {
     }
     $publicChildrenByParent[$parentId][] = $item;
 }
+
+$activeSpaceId = 0;
+$cursorId = (int)($page['id'] ?? 0);
+$hopGuard = 0;
+while ($cursorId > 0 && isset($itemsById[$cursorId]) && $hopGuard < 100) {
+    $node = $itemsById[$cursorId];
+    if (($node['type'] ?? '') === 'space') {
+        $activeSpaceId = $cursorId;
+        break;
+    }
+    $cursorId = (int)($node['parent_id'] ?? 0);
+    $hopGuard++;
+}
+
+$visibleSpaces = array_values(array_filter(
+    $items,
+    fn($i) => ($i['type'] ?? '') === 'space' && ($activeSpaceId === 0 || (int)$i['id'] === $activeSpaceId)
+));
 
 function renderPublicSubpages(array $childrenByParent, int $parentId, string $activeSlug, int $depth = 0): void {
     $children = $childrenByParent[$parentId] ?? [];
@@ -78,7 +98,7 @@ function renderPublicSubpages(array $childrenByParent, int $parentId, string $ac
         $textSize = $depth === 0 ? 'text-sm' : 'text-xs';
 
         echo '<li class="nav-item">';
-        echo '<a href="?s=' . htmlspecialchars($subSlug, ENT_QUOTES, 'UTF-8') . '" class="rounded-xl transition-all flex items-center pl-4 pr-2 py-1.5 ' . $textSize . ' ' . $linkClass . '">';
+        echo '<a href="?s=' . htmlspecialchars($subSlug, ENT_QUOTES, 'UTF-8') . '" class="public-nav-link rounded-xl transition-all flex items-center pl-4 pr-2 py-1.5 ' . $textSize . ' ' . $linkClass . '">';
         echo $subTitle;
         echo '</a>';
         renderPublicSubpages($childrenByParent, (int)$subp['id'], $activeSlug, $depth + 1);
@@ -113,6 +133,54 @@ function renderPublicSubpages(array $childrenByParent, int $parentId, string $ac
     <script src="https://cdn.jsdelivr.net/npm/editorjs-text-color-plugin@2.0.4/dist/bundle.js"></script>
     
     <link rel="stylesheet" href="assets/style.css">
+    <style>
+        body.public-page {
+            opacity: 0;
+            transition: opacity 360ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        body.public-page.is-ready {
+            opacity: 1;
+        }
+        body.public-page.is-leaving {
+            opacity: 0;
+        }
+        body.public-page #sidebar,
+        body.public-page main {
+            opacity: 0;
+            transform: translateY(12px) scale(0.995);
+            transition: opacity 420ms cubic-bezier(0.22, 1, 0.36, 1), transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+            will-change: opacity, transform;
+        }
+        body.public-page.is-ready #sidebar,
+        body.public-page.is-ready main {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        body.public-page.is-leaving #sidebar,
+        body.public-page.is-leaving main {
+            opacity: 0;
+            transform: translateY(-10px) scale(0.995);
+        }
+        body.public-page #sidebar,
+        body.public-page #sidebar * {
+            transition-property: background-color, color, border-color, opacity !important;
+            transition-duration: 140ms !important;
+            transition-timing-function: ease !important;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            body.public-page,
+            body.public-page main,
+            body.public-page #sidebar,
+            body.public-page #sidebar * {
+                transition: none !important;
+            }
+            body.public-page main,
+            body.public-page #sidebar {
+                opacity: 1 !important;
+                transform: none !important;
+            }
+        }
+    </style>
 </head>
 <body class="public-page bg-slate-900 text-slate-300 flex h-screen overflow-hidden selection:bg-blue-500/30 p-6 gap-2">
     <aside id="sidebar" class="w-80 bg-slate-800/80 border border-slate-700 shadow-2xl shrink-0 h-full overflow-y-auto flex flex-col rounded-3xl">
@@ -125,14 +193,14 @@ function renderPublicSubpages(array $childrenByParent, int $parentId, string $ac
         </div>
 
         <div class="p-4 space-y-6">
-            <?php foreach (array_filter($items, fn($i) => $i['type'] === 'space') as $space): ?>
+            <?php foreach ($visibleSpaces as $space): ?>
                 <?php $spages = array_filter($items, fn($i) => $i['type'] === 'page' && $i['parent_id'] == $space['id'] && $i['is_public'] == 1); ?>
                 <?php if (empty($spages)) continue; ?>
                 <div><h3 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 ml-3"><?php echo $space['title']; ?></h3>
                     <ul class="space-y-1">
                         <?php foreach ($spages as $sp): ?>
                             <li class="nav-item">
-                                <a href="?s=<?php echo $sp['slug']; ?>" class="rounded-xl transition-all flex items-center px-4 py-2 text-base <?php echo $sp['slug'] == $slug ? 'bg-blue-600/20 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'; ?>">
+                                <a href="?s=<?php echo $sp['slug']; ?>" class="public-nav-link rounded-xl transition-all flex items-center px-4 py-2 text-base <?php echo $sp['slug'] == $slug ? 'bg-blue-600/20 text-blue-400 font-bold nav-item-active shadow-inner' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'; ?>">
                                     <?php echo $sp['title']; ?>
                                 </a>
                                 <?php renderPublicSubpages($publicChildrenByParent, (int)$sp['id'], (string)$slug); ?>
@@ -146,6 +214,7 @@ function renderPublicSubpages(array $childrenByParent, int $parentId, string $ac
         <div class="mt-auto p-6 border-t border-slate-700/50 bg-slate-900/40">
             <span class="block text-[9px] text-slate-500 font-black uppercase tracking-[0.3em] mb-2">LunarDesk &bull; <?php echo $app_version; ?> <br> Timezone is <a href="https://time.is/UTC" target="_blank">UTC</a></span>
             <span class="block text-[9px] text-slate-500 font-black uppercase tracking-[0.3em]">2026 &copy; Ported by <a href="https://github.com/ByAldon" target="_blank" class="hover:text-blue-400 transition-colors">Aldon</a></span>
+            <span class="block text-[9px] text-slate-500 font-black uppercase tracking-[0.3em] mt-2"><a href="policy.php" target="_blank" class="hover:text-blue-400 transition-colors">Privacy</a> / <a href="policy.php" target="_blank" class="hover:text-blue-400 transition-colors">Cookies</a></span>
         </div>
     </aside>
     <main class="bg-slate-800/80 border border-slate-700 shadow-2xl rounded-3xl flex-1 h-full overflow-y-auto flex flex-col">
@@ -254,6 +323,7 @@ function renderPublicSubpages(array $childrenByParent, int $parentId, string $ac
             const rows = Array.isArray(data.content) ? data.content.map((row) => Array.isArray(row) ? [...row] : []) : [];
             const styles = data.ld_styles && typeof data.ld_styles === 'object' ? data.ld_styles : {};
             const cellMerges = styles.cellMerges || {};
+            const cellRichHtml = styles.cellRichHtml || {};
             const colors = styles.cellColors || {};
             const paddings = styles.cellPaddings || {};
             const textAlign = styles.cellTextAlign || {};
@@ -310,7 +380,9 @@ function renderPublicSubpages(array $childrenByParent, int $parentId, string $ac
                         }
                     }
 
-                    td.innerHTML = row[c] ? String(row[c]) : '<br>';
+                    td.innerHTML = cellRichHtml[key]
+                        ? String(cellRichHtml[key])
+                        : (row[c] ? String(row[c]) : '<br>');
                     td.style.borderStyle = 'solid';
                     td.style.borderColor = borderColor[key] ? String(borderColor[key]) : '#334155';
                     td.style.borderWidth = borderWidth[key] ? String(borderWidth[key]) : '1px';
@@ -406,6 +478,32 @@ function renderPublicSubpages(array $childrenByParent, int $parentId, string $ac
                     });
                 });
             };
+            const lockPublicInputs = (rows) => {
+                rows.forEach((cells) => {
+                    cells.forEach((cell) => {
+                        if (!cell) return;
+                        const inputs = Array.from(cell.querySelectorAll('.ld-table-checkbox, .ld-table-radio'));
+                        inputs.forEach((input) => {
+                            input.disabled = true;
+                            input.tabIndex = -1;
+                            input.setAttribute('aria-disabled', 'true');
+                        });
+                    });
+                });
+            };
+            const applyRichCellHtml = (rows, rawRows) => {
+                if (!Array.isArray(rawRows)) return;
+                rows.forEach((cells, rIdx) => {
+                    const srcRow = Array.isArray(rawRows[rIdx]) ? rawRows[rIdx] : [];
+                    cells.forEach((cell, cIdx) => {
+                        if (!cell) return;
+                        const raw = srcRow[cIdx];
+                        if (typeof raw !== 'string') return;
+                        if (!raw.includes('ld-table-radio') && !raw.includes('ld-table-checkbox')) return;
+                        cell.innerHTML = raw;
+                    });
+                });
+            };
             tableBlocks.forEach((block, tableIdx) => {
                 const tableEl = domTables[tableIdx];
                 if (!tableEl) return;
@@ -422,7 +520,12 @@ function renderPublicSubpages(array $childrenByParent, int $parentId, string $ac
                 const paddings = Object.keys(styles).length > 0
                     ? (styles.cellPaddings || {})
                     : ((block.data && block.data.cellPaddings) ? block.data.cellPaddings : {});
-                const inputStates = (block.data && block.data.cellInputStates) ? block.data.cellInputStates : {};
+                const inputStates = Object.keys(styles).length > 0
+                    ? (styles.cellInputStates || {})
+                    : ((block.data && block.data.cellInputStates) ? block.data.cellInputStates : {});
+                const cellRichHtml = Object.keys(styles).length > 0
+                    ? (styles.cellRichHtml || {})
+                    : ((block.data && block.data.cellRichHtml) ? block.data.cellRichHtml : {});
                 const cellTextAlign = styles.cellTextAlign || {};
                 const cellVerticalAlign = styles.cellVerticalAlign || {};
                 const cellBorderColor = styles.cellBorderColor || {};
@@ -434,9 +537,23 @@ function renderPublicSubpages(array $childrenByParent, int $parentId, string $ac
                 if (tableOptions.width) tableEl.style.width = String(tableOptions.width);
 
                 const rows = getRows(tableEl);
+                const rawRows = Array.isArray(block.data && block.data.content) ? block.data.content : [];
+                if (Object.keys(cellRichHtml).length > 0) {
+                    rows.forEach((cells, rIdx) => {
+                        cells.forEach((cell, cIdx) => {
+                            const key = `${rIdx}-${cIdx}`;
+                            if (cellRichHtml[key]) {
+                                cell.innerHTML = String(cellRichHtml[key]);
+                            }
+                        });
+                    });
+                } else {
+                    applyRichCellHtml(rows, rawRows);
+                }
                 applySizes(rows, colWidths, rowHeights);
                 applyPaddings(rows, paddings);
                 applyInputStates(rows, inputStates);
+                lockPublicInputs(rows);
                 rows.forEach((cells, rIdx) => {
                     cells.forEach((cell, cIdx) => {
                         const key = `${rIdx}-${cIdx}`;
@@ -494,6 +611,61 @@ function renderPublicSubpages(array $childrenByParent, int $parentId, string $ac
                     replaceBrokenTableBlocksWithHtml();
                 }, 0);
             }
+        });
+
+        const fadeDurationMs = 360;
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        let isNavigating = false;
+
+        const normalizeTargetUrl = (target) => {
+            try {
+                return new URL(target, window.location.href);
+            } catch (e) {
+                return null;
+            }
+        };
+
+        const navigateWithTransition = (target) => {
+            const nextUrl = normalizeTargetUrl(target);
+            if (!nextUrl) return;
+            if (nextUrl.pathname !== window.location.pathname) return;
+            const hasPageSlug = nextUrl.searchParams.has('s');
+            if (!hasPageSlug) return;
+            const currentSlug = new URL(window.location.href).searchParams.get('s') || '';
+            const nextSlug = nextUrl.searchParams.get('s') || '';
+            if (currentSlug === nextSlug) return;
+            if (isNavigating) return;
+
+            isNavigating = true;
+            if (prefersReducedMotion) {
+                window.location.href = nextUrl.href;
+                return;
+            }
+            document.body.classList.remove('is-ready');
+            document.body.classList.add('is-leaving');
+            window.setTimeout(() => {
+                window.location.href = nextUrl.href;
+            }, fadeDurationMs);
+        };
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (!prefersReducedMotion) {
+                requestAnimationFrame(() => document.body.classList.add('is-ready'));
+            } else {
+                document.body.classList.add('is-ready');
+            }
+        });
+
+        document.querySelectorAll('a[href*="?s="], a[href^="?s="], a[href*="&s="]').forEach((link) => {
+            link.addEventListener('click', (e) => {
+                const target = link.getAttribute('href');
+                if (!target) return;
+                if (e.defaultPrevented) return;
+                if (e.button !== 0) return;
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                e.preventDefault();
+                navigateWithTransition(target);
+            });
         });
     </script>
 </body>

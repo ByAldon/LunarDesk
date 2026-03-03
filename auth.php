@@ -142,7 +142,8 @@ if ($userCount == 0) {
         
         <div style="margin-top:30px;text-align:center;font-size:9px;color:#475569;font-weight:900;text-transform:uppercase;letter-spacing:0.2em;line-height:1.8;">
             LunarDesk &bull; <?php echo $app_version; ?><br>
-            2026 &copy; Ported by <a href="https://github.com/ByAldon" target="_blank" style="color:inherit;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#3b82f6'" onmouseout="this.style.color='inherit'">Aldon</a>
+            2026 &copy; Ported by <a href="https://github.com/ByAldon" target="_blank" style="color:inherit;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#3b82f6'" onmouseout="this.style.color='inherit'">Aldon</a><br>
+            <a href="policy.php" target="_blank" style="color:inherit;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#3b82f6'" onmouseout="this.style.color='inherit'">Privacy / Cookies</a>
         </div>
     </form></body></html>
     <?php exit;
@@ -224,7 +225,8 @@ if (empty($_SESSION['logged_in'])) {
         
         <div style="margin-top:30px;text-align:center;font-size:9px;color:#475569;font-weight:900;text-transform:uppercase;letter-spacing:0.2em;line-height:1.8;">
             LunarDesk &bull; <?php echo $app_version; ?><br>
-            2026 &copy; Ported by <a href="https://github.com/ByAldon" target="_blank" style="color:inherit;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#3b82f6'" onmouseout="this.style.color='inherit'">Aldon</a>
+            2026 &copy; Ported by <a href="https://github.com/ByAldon" target="_blank" style="color:inherit;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#3b82f6'" onmouseout="this.style.color='inherit'">Aldon</a><br>
+            <a href="policy.php" target="_blank" style="color:inherit;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#3b82f6'" onmouseout="this.style.color='inherit'">Privacy / Cookies</a>
         </div>
 
     </form></body></html>

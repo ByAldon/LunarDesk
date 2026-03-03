@@ -125,6 +125,55 @@ body.public-page #editorjs .ld-table-radio {
     pointer-events: none;
 }
 
+body.public-page #editorjs .ld-table-radio-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 7px;
+    width: 100%;
+}
+
+body.public-page #editorjs .ld-table-radio-title {
+    font-weight: 700;
+    margin-bottom: 2px;
+    color: #e2e8f0;
+    line-height: 1.35;
+}
+
+body.public-page #editorjs .ld-table-radio-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.35;
+    white-space: normal;
+    word-break: break-word;
+}
+
+body.public-page #editorjs .ld-table-radio {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    top: 0;
+    vertical-align: middle;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 2px solid #64748b !important;
+    border-radius: 9999px;
+    background: #0f172a;
+    flex: 0 0 16px;
+    opacity: 1 !important;
+    cursor: default;
+}
+
+body.public-page #editorjs .ld-table-radio:checked {
+    border-color: #60a5fa !important;
+    background: radial-gradient(circle at center, #60a5fa 0 45%, #0f172a 50% 100%);
+}
+
+body.public-page #editorjs .ld-table-radio:disabled {
+    opacity: 1 !important;
+}
+
 #editorjs .tc-table,
 #editorjs table {
     width: 100%;

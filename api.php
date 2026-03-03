@@ -62,6 +62,38 @@ try {
     $action = $_GET['action'] ?? '';
     $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
+    $sortJsonNode = function (&$node) use (&$sortJsonNode): void {
+        if (!is_array($node)) return;
+        foreach ($node as &$child) {
+            $sortJsonNode($child);
+        }
+        unset($child);
+        $keys = array_keys($node);
+        $isList = $keys === range(0, count($node) - 1);
+        if (!$isList) {
+            ksort($node);
+        }
+    };
+
+    $canonicalizeJsonString = function ($raw) use ($sortJsonNode): ?string {
+        if (!is_string($raw)) return null;
+        $trimmed = trim($raw);
+        if ($trimmed === '') return '';
+        $decoded = json_decode($trimmed, true);
+        if (json_last_error() !== JSON_ERROR_NONE) return null;
+        $sortJsonNode($decoded);
+        return json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    };
+
+    $jsonAwareEquals = function ($left, $right) use ($canonicalizeJsonString): bool {
+        $leftCanon = $canonicalizeJsonString((string)$left);
+        $rightCanon = $canonicalizeJsonString((string)$right);
+        if ($leftCanon !== null && $rightCanon !== null) {
+            return $leftCanon === $rightCanon;
+        }
+        return (string)$left === (string)$right;
+    };
+
     // --- PROFILE & USERS ---
     if ($action === 'profile') {
         if ($method === 'PUT') {
@@ -342,19 +374,21 @@ try {
             $newPublic = isset($input['is_public']) ? (int)$input['is_public'] : 0;
             $newCover = $input['cover_image'] ?? '';
             $actionType = $input['action'] ?? 'draft';
+            $publishedContentEqual = $jsonAwareEquals($existing['content'] ?? '', $newContent);
+            $draftContentEqual = $jsonAwareEquals($existing['draft_content'] ?? '', $newContent);
             $isSameAsPublished =
                 (string)($existing['title'] ?? '') === (string)$newTitle &&
-                (string)($existing['content'] ?? '') === (string)$newContent &&
+                $publishedContentEqual &&
                 (string)($existing['cover_image'] ?? '') === (string)$newCover &&
                 (int)($existing['is_public'] ?? 0) === $newPublic;
 
             if ($actionType === 'publish') {
                 $hasChanges =
                     (string)($existing['title'] ?? '') !== (string)$newTitle ||
-                    (string)($existing['content'] ?? '') !== (string)$newContent ||
+                    !$publishedContentEqual ||
                     (string)($existing['cover_image'] ?? '') !== (string)$newCover ||
                     (string)($existing['draft_title'] ?? '') !== (string)$newTitle ||
-                    (string)($existing['draft_content'] ?? '') !== (string)$newContent ||
+                    !$draftContentEqual ||
                     (string)($existing['draft_cover_image'] ?? '') !== (string)$newCover ||
                     (int)($existing['is_public'] ?? 0) !== $newPublic ||
                     (int)($existing['has_draft'] ?? 0) !== 0;
@@ -368,7 +402,7 @@ try {
                 $targetHasDraft = $isSameAsPublished ? 0 : 1;
                 $hasChanges =
                     (string)($existing['draft_title'] ?? '') !== (string)$newTitle ||
-                    (string)($existing['draft_content'] ?? '') !== (string)$newContent ||
+                    !$draftContentEqual ||
                     (string)($existing['draft_cover_image'] ?? '') !== (string)$newCover ||
                     (int)($existing['is_public'] ?? 0) !== $newPublic ||
                     (int)($existing['has_draft'] ?? 0) !== $targetHasDraft;

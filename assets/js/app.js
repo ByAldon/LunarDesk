@@ -109,6 +109,8 @@ createApp({
             editorHistoryIndex: -1,
             historyBusy: false,
             editorSessionKey: 0,
+            editorBootstrapping: false,
+            editorUserInteracted: false,
             silentRefreshTimer: null,
             silentRefreshInFlight: false
         }
@@ -150,6 +152,26 @@ createApp({
         },
         getUpdateNotesForVersion(version) {
             const notesByVersion = {
+                'v2.9.7.7': [
+                    'Table right-click menu is now larger for easier reading and clicking.',
+                    'Added a small search field at the top of the table right-click menu.',
+                    'Menu actions can now be filtered live while typing.'
+                ],
+                'v2.9.7.4': [
+                    'Table tools expanded: duplicate current column from the table menu/slash commands.',
+                    'Table tools expanded: move current row up or down from the table menu/slash commands.',
+                    'Improved table editing flow for faster structural changes.'
+                ],
+                'v2.9.7.6': [
+                    'The native table 4-dots menu now includes: Duplicate column.',
+                    'The native table 4-dots menu now includes: Move row up and Move row down.',
+                    'Table structure actions are available directly in the built-in table menu.'
+                ],
+                'v2.9.7.3': [
+                    'Updated the startup "System Updated" message content for this release.',
+                    'Version handling remains one-time per user, per app version.',
+                    'General maintenance and stability improvements.'
+                ],
                 'v2.9.4.11': [
                     'One-time "System Updated" popup added per user per version.',
                     'Popup now appears again automatically after each new version.',
@@ -409,6 +431,8 @@ async fetchMessages(roomId) {
         async selectDoc(page) {
             const sessionKey = this.editorSessionKey + 1;
             this.editorSessionKey = sessionKey;
+            this.editorBootstrapping = false;
+            this.editorUserInteracted = false;
             this.loading = true;
             this.pendingAutoSave = false;
             this.activePage = { ...page };
@@ -442,6 +466,7 @@ async fetchMessages(roomId) {
                 const HeaderToolClass = window.Header || window.EditorjsHeader;
                 const ParagraphToolClass = window.Paragraph;
                 const TableToolClass = window.Table || window.EditorjsTable;
+                this.editorBootstrapping = true;
                 globalEditorInstance = new EditorJS({
                     holder: 'editorjs',
                     data: initialData,
@@ -502,10 +527,20 @@ async fetchMessages(roomId) {
                         if (this.editorSessionKey !== sessionKey) return;
                         this.applyTableStylesFromData(initialData);
                         this.bindWordLikeTableBehavior();
-                        this.resetEditorHistory(initialData);
+                        const hydrated = this.captureTableStyles(JSON.parse(JSON.stringify(initialData)));
+                        const serializedHydrated = JSON.stringify(hydrated);
+                        this.lastSavedContent = serializedHydrated;
+                        this.resetEditorHistory(hydrated);
+                        this.needsSave = false;
+                        setTimeout(() => {
+                            if (this.editorSessionKey !== sessionKey) return;
+                            this.editorBootstrapping = false;
+                        }, 0);
                     },
                     onChange: () => {
                         if (this.editorSessionKey !== sessionKey) return;
+                        if (this.editorBootstrapping) return;
+                        if (!this.editorUserInteracted) return;
                         if (this._isRestoringHistory) return;
                         this.needsSave = true;
                         this.autoSave();
@@ -535,7 +570,12 @@ async fetchMessages(roomId) {
                 const raw = await this.getEditorOutput();
                 if (this.editorSessionKey !== sessionKey || !this.activePage || Number(this.activePage.id) !== pageId) return;
                 const str = JSON.stringify(raw);
-                if (str !== this.lastSavedContent || pageSnapshot.title !== this.lastSavedTitle || pageSnapshot.is_public !== this.lastSavedPublic || pageSnapshot.cover_image !== this.lastSavedCover) {
+                const hasChanges =
+                    str !== this.lastSavedContent ||
+                    pageSnapshot.title !== this.lastSavedTitle ||
+                    pageSnapshot.is_public !== this.lastSavedPublic ||
+                    pageSnapshot.cover_image !== this.lastSavedCover;
+                if (hasChanges) {
                     await this.fetchJson('api.php', {
                         method: 'PUT',
                         body: JSON.stringify({ ...pageSnapshot, content: str, action: 'draft' })
@@ -556,6 +596,8 @@ async fetchMessages(roomId) {
                         this.items[idx].draft_cover_image = pageSnapshot.cover_image;
                     }
                     this.queueSilentRefresh(350);
+                } else {
+                    this.needsSave = false;
                 }
             } catch (e) {
                 this.needsSave = true;
@@ -1144,6 +1186,24 @@ async fetchMessages(roomId) {
                     run: (cell) => { this.deleteTableColumn(cell); this.markTableChanged(); }
                 },
                 {
+                    id: 'duplicate-column',
+                    label: 'duplicate column',
+                    hint: 'Duplicate current column to the right',
+                    run: (cell) => this.duplicateTableColumn(cell)
+                },
+                {
+                    id: 'move-row-up',
+                    label: 'move row up',
+                    hint: 'Move current row one step up',
+                    run: (cell) => this.moveTableRow(cell, 'up')
+                },
+                {
+                    id: 'move-row-down',
+                    label: 'move row down',
+                    hint: 'Move current row one step down',
+                    run: (cell) => this.moveTableRow(cell, 'down')
+                },
+                {
                     id: 'merge-selected-cells',
                     label: 'merge selected cells',
                     hint: 'Merge Alt-selected cell range',
@@ -1369,6 +1429,81 @@ async fetchMessages(roomId) {
             this.tableSlashCell = null;
             this.tableSlashQuery = '';
         },
+        rememberActiveTableCell(target) {
+            const cell = this.getEditorTableCellFromTarget(target);
+            if (!cell) return;
+            this._tableActiveCell = cell;
+        },
+        getActiveTableCell() {
+            if (this._tableActiveCell && document.body.contains(this._tableActiveCell)) return this._tableActiveCell;
+            const active = this.getEditorTableCellFromTarget(document.activeElement);
+            return active || null;
+        },
+        isNativeTableDotsMenu(menuEl) {
+            if (!menuEl || !menuEl.textContent) return false;
+            const text = String(menuEl.textContent).toLowerCase();
+            return text.includes('add row above') && text.includes('add row below') && text.includes('delete row');
+        },
+        getNativeMenuActionNodes(menuEl) {
+            if (!menuEl) return [];
+            const candidates = Array.from(menuEl.querySelectorAll('button, [role="button"], .ce-popover-item, .tc-popover__item, li'));
+            return candidates.filter((el) => {
+                const t = String(el.textContent || '').trim().toLowerCase();
+                return t.length > 0;
+            });
+        },
+        addNativeTableMenuAction(menuEl, label, onRun) {
+            const actions = this.getNativeMenuActionNodes(menuEl);
+            const template = actions[0] || null;
+            let item = null;
+            if (template) {
+                item = template.cloneNode(true);
+                item.removeAttribute('disabled');
+                item.setAttribute('data-ld-native-table-action', '1');
+                const titleEl = item.querySelector('.ce-popover-item__title, .tc-popover__item-label, [class*="title"], [class*="label"]');
+                if (titleEl) titleEl.textContent = label;
+                else item.textContent = label;
+            } else {
+                item = document.createElement('button');
+                item.type = 'button';
+                item.textContent = label;
+                item.style.display = 'block';
+                item.style.width = '100%';
+                item.style.textAlign = 'left';
+            }
+            item.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const cell = this.getActiveTableCell();
+                if (!cell) return;
+                onRun(cell);
+            });
+            menuEl.appendChild(item);
+        },
+        enhanceNativeTableDotsMenu(menuEl) {
+            if (!this.isNativeTableDotsMenu(menuEl)) return;
+            if (menuEl.getAttribute('data-ld-native-enhanced') === '1') return;
+            menuEl.setAttribute('data-ld-native-enhanced', '1');
+
+            this.addNativeTableMenuAction(menuEl, 'Duplicate column', (cell) => this.duplicateTableColumn(cell));
+            this.addNativeTableMenuAction(menuEl, 'Move row up', (cell) => this.moveTableRow(cell, 'up'));
+            this.addNativeTableMenuAction(menuEl, 'Move row down', (cell) => this.moveTableRow(cell, 'down'));
+        },
+        ensureNativeTableMenuEnhancer() {
+            if (this._nativeTableMenuObserver) return;
+            this._nativeTableMenuObserver = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    mutation.addedNodes.forEach((node) => {
+                        if (!node || node.nodeType !== 1) return;
+                        const el = node;
+                        if (this.isNativeTableDotsMenu(el)) this.enhanceNativeTableDotsMenu(el);
+                        const nestedMenus = Array.from(el.querySelectorAll ? el.querySelectorAll('div, section, ul') : []);
+                        nestedMenus.forEach((menu) => this.enhanceNativeTableDotsMenu(menu));
+                    });
+                });
+            });
+            this._nativeTableMenuObserver.observe(document.body, { childList: true, subtree: true });
+        },
         runTableSlashCommand(commandId = '') {
             const cell = this.tableSlashCell;
             if (!cell) {
@@ -1389,9 +1524,15 @@ async fetchMessages(roomId) {
             if (!holder) return;
             this.unbindWordLikeTableBehavior();
 
+            this._editorInteractionHandler = (event) => {
+                if (!event || !event.target || !holder.contains(event.target)) return;
+                this.editorUserInteracted = true;
+            };
+
             this._tableWordKeydownHandler = (event) => {
                 const key = String(event.key || '').toLowerCase();
                 const hasCtrl = !!(event.ctrlKey || event.metaKey);
+                this.rememberActiveTableCell(event.target);
                 if (this.showTableSlashModal) {
                     if (key === 'escape') {
                         event.preventDefault();
@@ -1438,6 +1579,7 @@ async fetchMessages(roomId) {
             };
 
             this._tableContextMenuHandler = (event) => {
+                this.rememberActiveTableCell(event.target);
                 const cell = this.getEditorTableCellFromTarget(event.target);
                 if (!cell) return;
                 event.preventDefault();
@@ -1472,12 +1614,30 @@ async fetchMessages(roomId) {
                 this._tableSelectionAnchorCell = null;
             };
 
+            this._tableInputChangeHandler = (event) => {
+                this.rememberActiveTableCell(event.target);
+                const target = event.target;
+                if (!target || !target.matches) return;
+                if (!target.matches('.ld-table-radio, .ld-table-checkbox')) return;
+                if (!this.getEditorTableCellFromTarget(target)) return;
+                this.markTableChanged();
+            };
+            this._tableTrackCellHandler = (event) => this.rememberActiveTableCell(event.target);
+
             holder.addEventListener('keydown', this._tableWordKeydownHandler, true);
             holder.addEventListener('contextmenu', this._tableContextMenuHandler);
             holder.addEventListener('mousedown', this._tableCellSelectStartHandler);
+            holder.addEventListener('mouseover', this._tableTrackCellHandler);
+            holder.addEventListener('focusin', this._tableTrackCellHandler);
             holder.addEventListener('mouseover', this._tableCellSelectMoveHandler);
+            holder.addEventListener('change', this._tableInputChangeHandler, true);
+            holder.addEventListener('keydown', this._editorInteractionHandler, true);
+            holder.addEventListener('mousedown', this._editorInteractionHandler, true);
+            holder.addEventListener('input', this._editorInteractionHandler, true);
+            holder.addEventListener('paste', this._editorInteractionHandler, true);
             document.addEventListener('mousedown', this._tableContextMenuOutsideHandler);
             document.addEventListener('mouseup', this._tableCellSelectEndHandler);
+            this.ensureNativeTableMenuEnhancer();
         },
         unbindWordLikeTableBehavior() {
             const holder = document.getElementById('editorjs');
@@ -1490,8 +1650,21 @@ async fetchMessages(roomId) {
             if (holder && this._tableCellSelectStartHandler) {
                 holder.removeEventListener('mousedown', this._tableCellSelectStartHandler);
             }
+            if (holder && this._tableTrackCellHandler) {
+                holder.removeEventListener('mouseover', this._tableTrackCellHandler);
+                holder.removeEventListener('focusin', this._tableTrackCellHandler);
+            }
             if (holder && this._tableCellSelectMoveHandler) {
                 holder.removeEventListener('mouseover', this._tableCellSelectMoveHandler);
+            }
+            if (holder && this._tableInputChangeHandler) {
+                holder.removeEventListener('change', this._tableInputChangeHandler, true);
+            }
+            if (holder && this._editorInteractionHandler) {
+                holder.removeEventListener('keydown', this._editorInteractionHandler, true);
+                holder.removeEventListener('mousedown', this._editorInteractionHandler, true);
+                holder.removeEventListener('input', this._editorInteractionHandler, true);
+                holder.removeEventListener('paste', this._editorInteractionHandler, true);
             }
             if (this._tableContextMenuOutsideHandler) {
                 document.removeEventListener('mousedown', this._tableContextMenuOutsideHandler);
@@ -1499,13 +1672,21 @@ async fetchMessages(roomId) {
             if (this._tableCellSelectEndHandler) {
                 document.removeEventListener('mouseup', this._tableCellSelectEndHandler);
             }
+            if (this._nativeTableMenuObserver) {
+                this._nativeTableMenuObserver.disconnect();
+                this._nativeTableMenuObserver = null;
+            }
             this._tableWordKeydownHandler = null;
             this._tableContextMenuHandler = null;
             this._tableContextMenuOutsideHandler = null;
             this._tableCellSelectStartHandler = null;
             this._tableCellSelectMoveHandler = null;
             this._tableCellSelectEndHandler = null;
+            this._tableInputChangeHandler = null;
+            this._editorInteractionHandler = null;
             this._tableColorPickHandler = null;
+            this._tableTrackCellHandler = null;
+            this._tableActiveCell = null;
             this._isSelectingTableRange = false;
             this._tableSelectionAnchorCell = null;
             this.closeTableSlashHelper();
@@ -1564,6 +1745,7 @@ async fetchMessages(roomId) {
         },
         markTableChanged() {
             if (this._isRestoringHistory) return;
+            this.editorUserInteracted = true;
             this.needsSave = true;
             this.autoSave();
             this.queueHistorySnapshot();
@@ -1776,6 +1958,20 @@ async fetchMessages(roomId) {
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
         },
+        serializeTableCellRichHtml(cell) {
+            if (!cell) return '';
+            const clone = cell.cloneNode(true);
+            const inputs = Array.from(clone.querySelectorAll('.ld-table-checkbox, .ld-table-radio'));
+            inputs.forEach((input) => {
+                if (input && input.removeAttribute) {
+                    input.removeAttribute('checked');
+                }
+                if ('checked' in input) {
+                    input.checked = false;
+                }
+            });
+            return String(clone.innerHTML || '').trim();
+        },
         openTableRadioBuilder(cell) {
             if (!cell) return;
             this.radioBuilderCell = cell;
@@ -1827,6 +2023,30 @@ async fetchMessages(roomId) {
             }
 
             this.cancelTableRadioBuilder();
+            this.markTableChanged();
+        },
+        removeTableRadioGroups(cell) {
+            if (!cell) return;
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = String(cell.innerHTML || '');
+            const groups = Array.from(wrapper.querySelectorAll('.ld-table-radio-group'));
+            if (groups.length === 0) {
+                this.showAlert('Radio buttons', 'No radio group found in this cell.');
+                return;
+            }
+            groups.forEach((group) => {
+                const prev = group.previousElementSibling;
+                group.remove();
+                if (
+                    prev &&
+                    prev.tagName === 'DIV' &&
+                    String(prev.innerHTML || '').trim().toLowerCase() === '<br>'
+                ) {
+                    prev.remove();
+                }
+            });
+            const cleaned = wrapper.innerHTML.trim();
+            cell.innerHTML = cleaned ? cleaned : '<br>';
             this.markTableChanged();
         },
         getCellPixelSize(cell, axis, fallback) {
@@ -2199,6 +2419,52 @@ async fetchMessages(roomId) {
                 if (cell && cell.parentNode) cell.parentNode.removeChild(cell);
             });
         },
+        duplicateTableColumn(referenceCell) {
+            const pos = this.getTableCellPosition(referenceCell);
+            if (!pos) return;
+            pos.rows.forEach((row) => {
+                const source = row[pos.cIdx];
+                if (!source || !source.parentNode) return;
+                const clone = source.cloneNode(true);
+                source.parentNode.insertBefore(clone, source.nextSibling);
+            });
+            this.markTableChanged();
+        },
+        moveTableRow(referenceCell, direction) {
+            const pos = this.getTableCellPosition(referenceCell);
+            if (!pos) return;
+            const rowEl = referenceCell ? referenceCell.closest('.tc-row, tr') : null;
+            if (!rowEl || !rowEl.parentNode) return;
+
+            const findSiblingRow = (start, step) => {
+                let cursor = start;
+                while (cursor) {
+                    if (cursor.matches && cursor.matches('.tc-row, tr')) return cursor;
+                    cursor = step < 0 ? cursor.previousElementSibling : cursor.nextElementSibling;
+                }
+                return null;
+            };
+
+            if (direction === 'up') {
+                const target = findSiblingRow(rowEl.previousElementSibling, -1);
+                if (!target) return;
+                rowEl.parentNode.insertBefore(rowEl, target);
+            } else if (direction === 'down') {
+                const target = findSiblingRow(rowEl.nextElementSibling, 1);
+                if (!target) return;
+                rowEl.parentNode.insertBefore(target, rowEl);
+            } else {
+                return;
+            }
+
+            const freshRows = this.getEditorTableRows(pos.tableEl);
+            const nextRowIdx = direction === 'up' ? pos.rIdx - 1 : pos.rIdx + 1;
+            const focusCell = freshRows[nextRowIdx] && freshRows[nextRowIdx][pos.cIdx]
+                ? freshRows[nextRowIdx][pos.cIdx]
+                : null;
+            if (focusCell) this.focusTableCell(focusCell);
+            this.markTableChanged();
+        },
         duplicateCellContent(referenceCell, direction) {
             const pos = this.getTableCellPosition(referenceCell);
             if (!pos) return;
@@ -2223,9 +2489,9 @@ async fetchMessages(roomId) {
             menu.style.position = 'fixed';
             menu.style.zIndex = '9999';
             menu.style.display = 'none';
-            menu.style.width = '220px';
-            menu.style.maxWidth = '220px';
-            menu.style.maxHeight = '320px';
+            menu.style.width = '300px';
+            menu.style.maxWidth = '320px';
+            menu.style.maxHeight = '420px';
             menu.style.overflowY = 'auto';
             menu.style.overflowX = 'hidden';
             menu.style.scrollbarWidth = 'thin';
@@ -2233,17 +2499,35 @@ async fetchMessages(roomId) {
             menu.style.border = '1px solid #334155';
             menu.style.borderRadius = '8px';
             menu.style.boxShadow = '0 12px 30px rgba(0,0,0,0.35)';
-            menu.style.padding = '4px';
+            menu.style.padding = '8px';
+
+            const searchInput = document.createElement('input');
+            searchInput.type = 'text';
+            searchInput.placeholder = 'Search actions...';
+            searchInput.style.width = '100%';
+            searchInput.style.height = '30px';
+            searchInput.style.padding = '6px 10px';
+            searchInput.style.marginBottom = '8px';
+            searchInput.style.fontSize = '12px';
+            searchInput.style.fontWeight = '600';
+            searchInput.style.color = '#e2e8f0';
+            searchInput.style.background = '#111827';
+            searchInput.style.border = '1px solid #334155';
+            searchInput.style.borderRadius = '6px';
+            searchInput.style.outline = 'none';
+            menu.appendChild(searchInput);
 
             const makeButton = (label, onClick) => {
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.textContent = label;
+                btn.dataset.tableAction = '1';
+                btn.dataset.searchLabel = String(label || '').toLowerCase();
                 btn.style.display = 'block';
                 btn.style.width = '100%';
                 btn.style.textAlign = 'left';
-                btn.style.padding = '6px 8px';
-                btn.style.fontSize = '11px';
+                btn.style.padding = '8px 10px';
+                btn.style.fontSize = '12px';
                 btn.style.fontWeight = '600';
                 btn.style.color = '#e2e8f0';
                 btn.style.background = 'transparent';
@@ -2255,6 +2539,16 @@ async fetchMessages(roomId) {
                 btn.addEventListener('click', onClick);
                 return btn;
             };
+
+            const applyActionFilter = () => {
+                const q = String(searchInput.value || '').trim().toLowerCase();
+                const items = Array.from(menu.querySelectorAll('button[data-table-action="1"]'));
+                items.forEach((btn) => {
+                    const label = String(btn.dataset.searchLabel || '');
+                    btn.style.display = q === '' || label.includes(q) ? 'block' : 'none';
+                });
+            };
+            searchInput.addEventListener('input', applyActionFilter);
 
             menu.appendChild(makeButton('Insert row above', () => {
                 if (!this._tableMenuCell) return;
@@ -2290,6 +2584,21 @@ async fetchMessages(roomId) {
                 if (!this._tableMenuCell) return;
                 this.deleteTableColumn(this._tableMenuCell);
                 this.markTableChanged();
+                this.closeTableContextMenu();
+            }));
+            menu.appendChild(makeButton('Duplicate column', () => {
+                if (!this._tableMenuCell) return;
+                this.duplicateTableColumn(this._tableMenuCell);
+                this.closeTableContextMenu();
+            }));
+            menu.appendChild(makeButton('Move row up', () => {
+                if (!this._tableMenuCell) return;
+                this.moveTableRow(this._tableMenuCell, 'up');
+                this.closeTableContextMenu();
+            }));
+            menu.appendChild(makeButton('Move row down', () => {
+                if (!this._tableMenuCell) return;
+                this.moveTableRow(this._tableMenuCell, 'down');
                 this.closeTableContextMenu();
             }));
             menu.appendChild(makeButton('Merge selected cells (manual)', () => {
@@ -2333,6 +2642,11 @@ async fetchMessages(roomId) {
             menu.appendChild(makeButton('Insert radio group...', () => {
                 if (!this._tableMenuCell) return;
                 this.openTableRadioBuilder(this._tableMenuCell);
+                this.closeTableContextMenu();
+            }));
+            menu.appendChild(makeButton('Remove radio group(s)', () => {
+                if (!this._tableMenuCell) return;
+                this.removeTableRadioGroups(this._tableMenuCell);
                 this.closeTableContextMenu();
             }));
             menu.appendChild(makeButton('Cell background hex...', () => {
@@ -2468,12 +2782,20 @@ async fetchMessages(roomId) {
 
             document.body.appendChild(menu);
             this._tableContextMenuEl = menu;
+            this._tableContextMenuSearchInput = searchInput;
+            this._tableContextMenuApplyFilter = applyActionFilter;
         },
         openTableContextMenu(cell, x, y) {
             this.ensureTableContextMenu();
             this._tableMenuCell = cell;
             const menu = this._tableContextMenuEl;
             if (!menu) return;
+            if (this._tableContextMenuSearchInput) {
+                this._tableContextMenuSearchInput.value = '';
+            }
+            if (typeof this._tableContextMenuApplyFilter === 'function') {
+                this._tableContextMenuApplyFilter();
+            }
             menu.style.display = 'block';
             const menuRect = menu.getBoundingClientRect();
             const maxX = Math.max(8, window.innerWidth - menuRect.width - 8);
@@ -2505,6 +2827,8 @@ async fetchMessages(roomId) {
                 const borderWidths = styles.cellBorderWidth || {};
                 const tableOptions = styles.tableOptions || {};
                 const cellMerges = styles.cellMerges || {};
+                const cellRichHtml = styles.cellRichHtml || {};
+                const cellInputStates = styles.cellInputStates || {};
 
                 if (tableOptions.tableLayout) tableEl.style.tableLayout = String(tableOptions.tableLayout);
                 if (tableOptions.width) tableEl.style.width = String(tableOptions.width);
@@ -2512,6 +2836,10 @@ async fetchMessages(roomId) {
                 rows.forEach((row, rIdx) => {
                     row.forEach((cell, cIdx) => {
                         const colorKey = `${rIdx}-${cIdx}`;
+                        const richHtml = cellRichHtml[colorKey];
+                        if (richHtml) {
+                            cell.innerHTML = String(richHtml);
+                        }
                         const color = colors[colorKey];
                         if (color) this.setCellBackgroundColor(cell, color);
 
@@ -2533,6 +2861,14 @@ async fetchMessages(roomId) {
                         if (bw) {
                             cell.style.borderStyle = 'solid';
                             cell.style.borderWidth = String(bw);
+                        }
+
+                        const states = Array.isArray(cellInputStates[colorKey]) ? cellInputStates[colorKey] : [];
+                        if (states.length > 0) {
+                            const inputs = Array.from(cell.querySelectorAll('.ld-table-checkbox, .ld-table-radio'));
+                            inputs.forEach((input, idx) => {
+                                input.checked = !!states[idx];
+                            });
                         }
                     });
                 });
@@ -2582,6 +2918,8 @@ async fetchMessages(roomId) {
                 const cellBorderWidth = {};
                 const tableOptions = {};
                 const cellMerges = {};
+                const cellRichHtml = {};
+                const cellInputStates = {};
 
                 if (tableEl.style.tableLayout) tableOptions.tableLayout = tableEl.style.tableLayout;
                 if (tableEl.style.width) tableOptions.width = tableEl.style.width;
@@ -2614,6 +2952,15 @@ async fetchMessages(roomId) {
                                 colspan: Number.isFinite(colspan) && colspan > 1 ? colspan : 1,
                                 rowspan: Number.isFinite(rowspan) && rowspan > 1 ? rowspan : 1
                             };
+                        }
+
+                        const inputs = Array.from(cell.querySelectorAll('.ld-table-checkbox, .ld-table-radio'));
+                        if (inputs.length > 0) {
+                            const richHtml = this.serializeTableCellRichHtml(cell);
+                            if (richHtml) {
+                                cellRichHtml[key] = richHtml;
+                            }
+                            cellInputStates[key] = inputs.map((input) => !!input.checked);
                         }
                     });
                 });
@@ -2649,6 +2996,8 @@ async fetchMessages(roomId) {
                 if (Object.keys(cellBorderWidth).length > 0) out.cellBorderWidth = cellBorderWidth;
                 if (Object.keys(tableOptions).length > 0) out.tableOptions = tableOptions;
                 if (Object.keys(cellMerges).length > 0) out.cellMerges = cellMerges;
+                if (Object.keys(cellRichHtml).length > 0) out.cellRichHtml = cellRichHtml;
+                if (Object.keys(cellInputStates).length > 0) out.cellInputStates = cellInputStates;
                 if (Object.keys(out).length > 0) block.data.ld_styles = out;
                 else delete block.data.ld_styles;
             });

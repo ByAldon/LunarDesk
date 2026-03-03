@@ -604,7 +604,7 @@ include 'version.php';
 
         <footer class="shrink-0 h-14 flex items-center justify-between px-10 bg-slate-900 border-t border-slate-800 z-30 relative">
             <span class="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">LunarDesk &bull; <?php echo $app_version; ?> <br> Timezone is <a href="https://time.is/UTC" target="_blank">UTC</a></span>
-            <span class="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">2026 &copy; Ported by <a href="https://github.com/ByAldon" target="_blank" class="hover:text-blue-400 transition-colors">Aldon</a></span>
+            <span class="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">2026 &copy; Ported by <a href="https://github.com/ByAldon" target="_blank" class="hover:text-blue-400 transition-colors">Aldon</a> &bull; <a href="policy.php" target="_blank" class="hover:text-blue-400 transition-colors">Privacy</a> / <a href="policy.php" target="_blank" class="hover:text-blue-400 transition-colors">Cookies</a></span>
         </footer>
 
     </div>
