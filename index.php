@@ -45,6 +45,7 @@ include 'version.php';
                 <button v-if="currentUser" @click="profileForm = { username: currentUser.username, nickname: currentUser.nickname, email: currentUser.email, password: '' }; showProfileModal = true" class="text-[10px] text-slate-300 hover:text-white font-black uppercase tracking-widest transition-colors">{{ currentUser.nickname || currentUser.username }}</button>
                 <div class="h-4 w-px bg-slate-600"></div>
                 <button v-if="currentUser?.role === 'admin'" @click="openUsersModal" class="text-slate-300 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors">Users</button>
+                <button @click="showManualModal = true" class="text-slate-300 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors">Manual</button>
                 <button @click="hardRefresh" class="text-slate-300 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors">Hard Refresh</button>
                 <a href="?action=logout" class="text-red-400 hover:text-red-300 text-[10px] font-black uppercase tracking-widest transition-colors">Logout</a>
             </div>
@@ -273,6 +274,95 @@ include 'version.php';
                     <h2 class="text-2xl font-black text-white mb-3 uppercase tracking-tighter">{{ alertDialog.title }}</h2>
                     <p class="text-slate-300 text-sm mb-10 leading-relaxed">{{ alertDialog.message }}</p>
                     <button @click="alertDialog.show = false" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black uppercase py-4 rounded-xl text-xs shadow-lg shadow-blue-500/20 transition-all">Continue</button>
+                </div>
+            </div>
+        </transition>
+
+        <transition name="modal">
+            <div v-if="showManualModal" class="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
+                <div class="bg-slate-800 border border-slate-700 p-10 rounded-3xl w-full max-w-6xl shadow-2xl max-h-[92vh] overflow-y-auto">
+                    <div class="flex justify-between items-start mb-8 gap-6">
+                        <div>
+                            <h2 class="text-3xl font-black text-white uppercase tracking-tighter">LunarDesk Manual</h2>
+                            <p class="text-slate-400 text-xs uppercase tracking-[0.2em] mt-2">Editor, pages, publishing and table workflows</p>
+                        </div>
+                        <button @click="showManualModal = false" class="text-slate-500 hover:text-white transition-all duration-300 hover:rotate-90 p-2 text-xl font-bold outline-none">&times;</button>
+                    </div>
+
+                    <div class="space-y-8 text-slate-300 text-sm leading-relaxed">
+                        <section>
+                            <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">1. Workspace Layout</h3>
+                            <p>The interface is split into three primary columns. The left column contains Stream and Terminal, the middle column contains your Spaces and page tree, and the main panel contains the active page editor.</p>
+                            <p class="mt-2">You can resize the columns by dragging the vertical handles between panels. Inside Stream, you can also resize the Channels area with the horizontal drag handle.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">2. Structure: Spaces, Pages, Subpages</h3>
+                            <p>Use <strong>+ New Space</strong> to create a top-level container. Inside each space, create pages and nested subpages from the plus buttons shown on hover. Use the up/down controls to reorder items.</p>
+                            <p class="mt-2">Every item can hold draft data. A page marked as <strong>Unpublished</strong> has changes saved in draft that are not yet pushed to the public page.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">3. Page Header Controls</h3>
+                            <p>At the top of each page, you can edit title and cover banner. In the sticky action bar, the controls work as follows:</p>
+                            <ul class="list-disc pl-6 mt-2 space-y-1">
+                                <li><strong>Undo / Redo:</strong> Step backward or forward through editor history.</li>
+                                <li><strong>Live toggle:</strong> Sets public visibility on or off.</li>
+                                <li><strong>Copy Link / Open Public:</strong> Available when the page is public.</li>
+                                <li><strong>Publish:</strong> Pushes current draft to the public version.</li>
+                                <li><strong>Delete icon:</strong> Removes the current page.</li>
+                            </ul>
+                        </section>
+
+                        <section>
+                            <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">4. Editor Blocks and Formatting</h3>
+                            <p>LunarDesk uses block-based editing. Add content blocks using EditorJS tools such as Paragraph, Header, List, Checkboxes, Quote, Warning, Code, Delimiter, Image, Embed and Table.</p>
+                            <p class="mt-2">Inline formatting supports bold, italic, links, underline and inline code. Most blocks can be edited directly and reordered with the standard block controls.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">5. Autosave, Drafts and Publish Flow</h3>
+                            <p>Changes are auto-saved to draft while you edit. The signal timestamp confirms the latest successful save. Draft saves do not automatically update the public page.</p>
+                            <p class="mt-2">To push your latest draft to public output, use <strong>Publish</strong>. Public viewers only see published content from <code>p.php?s=slug</code>.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">6. Table Editing: Core Actions</h3>
+                            <p>Right-click any table cell to open the table context menu. Available actions include row/column insert and delete, row height and column width adjustments, cell padding, background colors, alignment, border styling, table layout mode and table deletion.</p>
+                            <p class="mt-2">Use <strong>Tab</strong> to move to the next cell. At the end of a row, Tab can create a new row automatically.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">7. Manual Multi-Cell Merge (New)</h3>
+                            <p>You can manually merge a selected range of cells into a single cell:</p>
+                            <ul class="list-disc pl-6 mt-2 space-y-1">
+                                <li>Hold <strong>Alt</strong> and drag across cells to select a rectangular range.</li>
+                                <li>Right-click inside the table and choose <strong>Merge selected cells (manual)</strong>.</li>
+                                <li>Use <strong>Clear selected cells</strong> or press <strong>Esc</strong> to clear the selection highlight.</li>
+                            </ul>
+                            <p class="mt-2">Validation rules: selection must be one continuous rectangle in the same table. If merged cells already exist in that range, split them first, then merge again.</p>
+                        </section>
+
+                        <section>
+                            <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">8. Keyboard Shortcuts</h3>
+                            <ul class="list-disc pl-6 mt-2 space-y-1">
+                                <li><strong>Ctrl/Cmd + Z:</strong> Undo</li>
+                                <li><strong>Ctrl/Cmd + Shift + Z:</strong> Redo</li>
+                                <li><strong>Ctrl/Cmd + Y:</strong> Redo</li>
+                                <li><strong>Tab / Shift + Tab:</strong> Move between table cells</li>
+                                <li><strong>Esc:</strong> Clear current manual table selection</li>
+                            </ul>
+                        </section>
+
+                        <section>
+                            <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">9. Stream, Terminal and Admin Utilities</h3>
+                            <p><strong>Stream</strong> shows channel messages and webhook output. <strong>Terminal</strong> is an admin command/message stream. Admin actions include room settings, webhook generation, message cleanup, and user access management.</p>
+                        </section>
+                    </div>
+
+                    <div class="pt-8">
+                        <button @click="showManualModal = false" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-blue-500/20">Close Manual</button>
+                    </div>
                 </div>
             </div>
         </transition>

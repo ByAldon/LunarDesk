@@ -130,24 +130,175 @@ $metaText = implode(' ', $metaParts);
         <div class="p-12 px-20 max-w-5xl mx-auto w-full pb-32"><div id="editorjs"></div></div>
     </main>
     <script>
-        const content = <?php echo $page['content'] ?: '{"blocks":[]}'; ?>;
+        const rawContent = <?php echo $page['content'] ?: '{"blocks":[]}'; ?>;
+        const normalizeTableBlocksForReadOnly = (doc) => {
+            if (!doc || !Array.isArray(doc.blocks)) return { blocks: [] };
+            const cloned = JSON.parse(JSON.stringify(doc));
+            cloned.blocks = cloned.blocks.map((block) => {
+                if (!block || block.type !== 'table') return block;
+                const data = block.data && typeof block.data === 'object' ? block.data : {};
+                const sourceRows = Array.isArray(data.content) ? data.content : [];
+                const rows = sourceRows.map((row) => {
+                    if (!Array.isArray(row)) return [];
+                    return row.map((cell) => (cell == null ? '' : String(cell)));
+                });
+                const maxCols = rows.reduce((m, r) => Math.max(m, r.length), 0);
+                if (maxCols > 0) {
+                    rows.forEach((row) => {
+                        while (row.length < maxCols) row.push('');
+                    });
+                }
+                return { ...block, data: { ...data, content: rows } };
+            });
+            return cloned;
+        };
+        const content = normalizeTableBlocksForReadOnly(rawContent);
         const HeaderToolClass = window.Header || window.EditorjsHeader;
         const ParagraphToolClass = window.Paragraph;
-        const applyPublicTableCellColors = () => {
+        const getRows = (tableEl) => {
+            const tcRows = Array.from(tableEl.querySelectorAll('.tc-row'));
+            if (tcRows.length > 0) {
+                return tcRows.map((row) => Array.from(row.querySelectorAll('.tc-cell')));
+            }
+            const trRows = Array.from(tableEl.querySelectorAll('tr'));
+            return trRows.map((row) => Array.from(row.querySelectorAll('td, th')));
+        };
+        const applyStoredTableMerges = (tableEl, cellMerges) => {
+            if (!tableEl || !cellMerges || typeof cellMerges !== 'object') return;
+            const keys = Object.keys(cellMerges).sort((a, b) => {
+                const [ar, ac] = a.split('-').map(Number);
+                const [br, bc] = b.split('-').map(Number);
+                if (ar !== br) return ar - br;
+                return ac - bc;
+            });
+            keys.forEach((key) => {
+                const merge = cellMerges[key] || {};
+                const targetColspan = Math.max(1, parseInt(merge.colspan || '1', 10));
+                const targetRowspan = Math.max(1, parseInt(merge.rowspan || '1', 10));
+                const [rIdx, cIdx] = key.split('-').map(Number);
+                if (!Number.isFinite(rIdx) || !Number.isFinite(cIdx)) return;
+
+                const rows = getRows(tableEl);
+                const origin = rows[rIdx] && rows[rIdx][cIdx];
+                if (!origin) return;
+
+                if (targetColspan > 1) {
+                    for (let i = 1; i < targetColspan; i++) {
+                        const freshRows = getRows(tableEl);
+                        const row = freshRows[rIdx] || [];
+                        const right = row[cIdx + 1];
+                        if (!right) break;
+                        if (right.parentNode) right.parentNode.removeChild(right);
+                    }
+                    origin.setAttribute('colspan', String(targetColspan));
+                }
+                if (targetRowspan > 1) {
+                    for (let i = 1; i < targetRowspan; i++) {
+                        const freshRows = getRows(tableEl);
+                        const row = freshRows[rIdx + i] || [];
+                        const below = row[cIdx];
+                        if (!below) continue;
+                        if (below.parentNode) below.parentNode.removeChild(below);
+                    }
+                    origin.setAttribute('rowspan', String(targetRowspan));
+                }
+            });
+        };
+        const buildFallbackTable = (block) => {
+            const data = block && block.data && typeof block.data === 'object' ? block.data : {};
+            const rows = Array.isArray(data.content) ? data.content : [];
+            const styles = data.ld_styles && typeof data.ld_styles === 'object' ? data.ld_styles : {};
+            const cellMerges = styles.cellMerges || {};
+            const colors = styles.cellColors || {};
+            const paddings = styles.cellPaddings || {};
+            const textAlign = styles.cellTextAlign || {};
+            const verticalAlign = styles.cellVerticalAlign || {};
+            const borderColor = styles.cellBorderColor || {};
+            const borderWidth = styles.cellBorderWidth || {};
+            const columnWidths = styles.columnWidths || {};
+            const rowHeights = styles.rowHeights || {};
+            const tableOptions = styles.tableOptions || {};
+            const maxCols = rows.reduce((m, r) => Math.max(m, Array.isArray(r) ? r.length : 0), 0);
+            const occupied = new Set();
+
+            const wrap = document.createElement('div');
+            wrap.style.overflowX = 'auto';
+            wrap.style.margin = '8px 0';
+
+            const table = document.createElement('table');
+            table.style.width = tableOptions.width ? String(tableOptions.width) : '100%';
+            table.style.tableLayout = tableOptions.tableLayout ? String(tableOptions.tableLayout) : 'fixed';
+            table.style.borderCollapse = 'collapse';
+            table.style.borderSpacing = '0';
+            table.style.backgroundColor = 'transparent';
+
+            for (let r = 0; r < rows.length; r++) {
+                const tr = document.createElement('tr');
+                const row = Array.isArray(rows[r]) ? rows[r] : [];
+                for (let c = 0; c < maxCols; c++) {
+                    if (occupied.has(`${r}-${c}`)) continue;
+                    const td = document.createElement('td');
+                    const key = `${r}-${c}`;
+                    const merge = cellMerges[key] || {};
+                    const colspan = Math.max(1, parseInt(merge.colspan || '1', 10));
+                    const rowspan = Math.max(1, parseInt(merge.rowspan || '1', 10));
+                    if (colspan > 1) td.colSpan = colspan;
+                    if (rowspan > 1) td.rowSpan = rowspan;
+
+                    for (let rr = r; rr < r + rowspan; rr++) {
+                        for (let cc = c; cc < c + colspan; cc++) {
+                            if (rr === r && cc === c) continue;
+                            occupied.add(`${rr}-${cc}`);
+                        }
+                    }
+
+                    td.innerHTML = row[c] ? String(row[c]) : '<br>';
+                    td.style.borderStyle = 'solid';
+                    td.style.borderColor = borderColor[key] ? String(borderColor[key]) : '#334155';
+                    td.style.borderWidth = borderWidth[key] ? String(borderWidth[key]) : '1px';
+                    td.style.padding = paddings[key] ? String(paddings[key]) : '8px';
+                    td.style.textAlign = textAlign[key] ? String(textAlign[key]) : '';
+                    td.style.verticalAlign = verticalAlign[key] ? String(verticalAlign[key]) : '';
+                    if (colors[key]) td.style.backgroundColor = String(colors[key]);
+
+                    const width = Number(columnWidths[c]);
+                    if (Number.isFinite(width) && width > 0) {
+                        td.style.width = `${width}px`;
+                        td.style.minWidth = `${width}px`;
+                    }
+                    const height = Number(rowHeights[r]);
+                    if (Number.isFinite(height) && height > 0) {
+                        td.style.height = `${height}px`;
+                        td.style.minHeight = `${height}px`;
+                    }
+                    tr.appendChild(td);
+                }
+                table.appendChild(tr);
+            }
+            wrap.appendChild(table);
+            return wrap;
+        };
+        const replaceBrokenTableBlocksWithHtml = () => {
+            const tableBlocks = content.blocks.filter((b) => b && b.type === 'table');
+            if (tableBlocks.length === 0) return;
+            const ceBlocks = Array.from(document.querySelectorAll('#editorjs .ce-block'));
+            let tableIdx = 0;
+            ceBlocks.forEach((blockEl) => {
+                const text = (blockEl.textContent || '').toLowerCase();
+                const isBrokenTable = text.includes('table') && text.includes('can not be displayed correctly');
+                if (!isBrokenTable) return;
+                const tableBlock = tableBlocks[tableIdx++];
+                if (!tableBlock) return;
+                const contentEl = blockEl.querySelector('.ce-block__content') || blockEl;
+                contentEl.innerHTML = '';
+                contentEl.appendChild(buildFallbackTable(tableBlock));
+            });
+        };
+        const applyPublicTableStyles = () => {
             if (!content || !Array.isArray(content.blocks)) return;
             const tableBlocks = content.blocks.filter(b => b.type === 'table');
             const domTables = Array.from(document.querySelectorAll('#editorjs .tc-table, #editorjs table'));
-            const getRows = (tableEl) => {
-                const tcRows = Array.from(tableEl.querySelectorAll('.tc-row'));
-                if (tcRows.length > 0) {
-                    return tcRows.map((row) => Array.from(row.querySelectorAll('.tc-cell')));
-                }
-                const trRows = Array.from(tableEl.querySelectorAll('tr'));
-                return trRows.map((row) => Array.from(row.querySelectorAll('td, th')));
-            };
-            const applySizes = (rows, block) => {
-                const colWidths = (block.data && block.data.columnWidths) ? block.data.columnWidths : {};
-                const rowHeights = (block.data && block.data.rowHeights) ? block.data.rowHeights : {};
+            const applySizes = (rows, colWidths, rowHeights) => {
                 Object.keys(colWidths).forEach((colKey) => {
                     const cIdx = Number(colKey);
                     const width = Number(colWidths[colKey]);
@@ -171,8 +322,7 @@ $metaText = implode(' ', $metaParts);
                     });
                 });
             };
-            const applyPaddings = (rows, block) => {
-                const paddings = (block.data && block.data.cellPaddings) ? block.data.cellPaddings : {};
+            const applyPaddings = (rows, paddings) => {
                 Object.keys(paddings).forEach((key) => {
                     const parts = key.split('-');
                     const rIdx = Number(parts[0]);
@@ -183,8 +333,7 @@ $metaText = implode(' ', $metaParts);
                     cell.style.padding = String(paddings[key]);
                 });
             };
-            const applyInputStates = (rows, block) => {
-                const inputStates = (block.data && block.data.cellInputStates) ? block.data.cellInputStates : {};
+            const applyInputStates = (rows, inputStates) => {
                 Object.keys(inputStates).forEach((key) => {
                     const parts = key.split('-');
                     const rIdx = Number(parts[0]);
@@ -200,21 +349,59 @@ $metaText = implode(' ', $metaParts);
                 });
             };
             tableBlocks.forEach((block, tableIdx) => {
-                const colorMap = (block.data && block.data.cellColors) ? block.data.cellColors : {};
                 const tableEl = domTables[tableIdx];
                 if (!tableEl) return;
+                const styles = (block.data && block.data.ld_styles) ? block.data.ld_styles : {};
+                const colorMap = Object.keys(styles).length > 0
+                    ? (styles.cellColors || {})
+                    : ((block.data && block.data.cellColors) ? block.data.cellColors : {});
+                const colWidths = Object.keys(styles).length > 0
+                    ? (styles.columnWidths || {})
+                    : ((block.data && block.data.columnWidths) ? block.data.columnWidths : {});
+                const rowHeights = Object.keys(styles).length > 0
+                    ? (styles.rowHeights || {})
+                    : ((block.data && block.data.rowHeights) ? block.data.rowHeights : {});
+                const paddings = Object.keys(styles).length > 0
+                    ? (styles.cellPaddings || {})
+                    : ((block.data && block.data.cellPaddings) ? block.data.cellPaddings : {});
+                const inputStates = (block.data && block.data.cellInputStates) ? block.data.cellInputStates : {};
+                const cellTextAlign = styles.cellTextAlign || {};
+                const cellVerticalAlign = styles.cellVerticalAlign || {};
+                const cellBorderColor = styles.cellBorderColor || {};
+                const cellBorderWidth = styles.cellBorderWidth || {};
+                const tableOptions = styles.tableOptions || {};
+                const cellMerges = styles.cellMerges || {};
+
+                if (tableOptions.tableLayout) tableEl.style.tableLayout = String(tableOptions.tableLayout);
+                if (tableOptions.width) tableEl.style.width = String(tableOptions.width);
+
                 const rows = getRows(tableEl);
-                applySizes(rows, block);
-                applyPaddings(rows, block);
-                applyInputStates(rows, block);
+                applySizes(rows, colWidths, rowHeights);
+                applyPaddings(rows, paddings);
+                applyInputStates(rows, inputStates);
                 rows.forEach((cells, rIdx) => {
                     cells.forEach((cell, cIdx) => {
                         const key = `${rIdx}-${cIdx}`;
                         if (colorMap[key]) {
                             cell.style.backgroundColor = colorMap[key];
                         }
+                        if (cellTextAlign[key]) {
+                            cell.style.textAlign = String(cellTextAlign[key]);
+                        }
+                        if (cellVerticalAlign[key]) {
+                            cell.style.verticalAlign = String(cellVerticalAlign[key]);
+                        }
+                        if (cellBorderColor[key]) {
+                            cell.style.borderStyle = 'solid';
+                            cell.style.borderColor = String(cellBorderColor[key]);
+                        }
+                        if (cellBorderWidth[key]) {
+                            cell.style.borderStyle = 'solid';
+                            cell.style.borderWidth = String(cellBorderWidth[key]);
+                        }
                     });
                 });
+                applyStoredTableMerges(tableEl, cellMerges);
             });
         };
         new EditorJS({ 
@@ -244,7 +431,10 @@ $metaText = implode(' ', $metaParts);
                 Color: window.ColorPlugin 
             },
             onReady: () => {
-                applyPublicTableCellColors();
+                applyPublicTableStyles();
+                setTimeout(() => {
+                    replaceBrokenTableBlocksWithHtml();
+                }, 0);
             }
         });
     </script>

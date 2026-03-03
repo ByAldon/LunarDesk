@@ -86,6 +86,7 @@ createApp({
             showProfileModal: false,
             profileForm: { username: '', email: '', nickname: '', password: '' },
             showUsersModal: false,
+            showManualModal: false,
             userList: [],
             editingUser: false,
             userForm: { username: '', email: '', nickname: '', role: 'user' },
