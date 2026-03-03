@@ -2001,6 +2001,10 @@ async fetchMessages(roomId) {
         }
     },
     computed: {
+        canPublish() {
+            if (!this.activePage) return false;
+            return !this.isPublishing && (this.needsSave || Number(this.activePage.has_draft) === 1);
+        },
         canUndo() {
             return this.editorHistoryIndex > 0 && !this.historyBusy;
         },

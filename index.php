@@ -236,7 +236,14 @@ include 'version.php';
                                     <a :href="'p.php?s=' + activePage.slug" target="_blank" class="bg-slate-700 hover:bg-slate-600 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md border border-slate-600">Open Public</a>
                                 </template>
 
-                                <button @click="manualPublish" class="bg-blue-600 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 shadow-lg shadow-blue-500/20 active:scale-95 transition-all">Publish</button>
+                                <button
+                                    @click="manualPublish"
+                                    :disabled="!canPublish"
+                                    class="text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                    :class="canPublish
+                                        ? 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20 active:scale-95'
+                                        : 'bg-slate-600 cursor-not-allowed opacity-70'"
+                                >Publish</button>
                                 <button @click.stop="confirmDelete(activePage.id, 'page')" class="text-slate-400 hover:text-red-400 transition-colors bg-slate-700 p-2.5 rounded-xl hover:bg-red-500/20 ml-2 border border-slate-600">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                 </button>
