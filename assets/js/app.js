@@ -1,4 +1,4 @@
-﻿// assets/js/app.js
+// assets/js/app.js
 let globalEditorInstance = null;
 function focusEditor() {
     if (globalEditorInstance) globalEditorInstance.focus();
@@ -152,6 +152,36 @@ createApp({
         },
         getUpdateNotesForVersion(version) {
             const notesByVersion = {
+                'v2.9.7.22': [
+                    'Fixed table menus that could remain visible after clicking outside a table.',
+                    'Outside-click now closes custom table menus and native row/column popovers.',
+                    'Improved cleanup for table menu overlays in editor interactions.'
+                ],
+                'v2.9.7.21': [
+                    'Manual table section updated to match current menu/search behavior.',
+                    'Documented multi-word search in slash and right-click table menus.',
+                    'Documented Row height... usage in right-click and native row menus.'
+                ],
+                'v2.9.7.20': [
+                    'Fixed row-height mini adjust popup getting stuck after opening from the native row menu.',
+                    'Outside-click handler now closes the numeric adjust popup even without the custom right-click menu.',
+                    'Improved table menu cleanup behavior for native and custom menu flows.'
+                ],
+                'v2.9.7.19': [
+                    'Fixed native table row/column custom action icons showing question marks.',
+                    'Custom native menu actions now reuse the host menu icon style consistently.',
+                    'Checked native row and column menu action rendering consistency.'
+                ],
+                'v2.9.7.18': [
+                    'Removed row height +/- slash actions to reduce duplicate sizing entries.',
+                    'Added Row height... action to the native row menu (4-dots).',
+                    'Improved row sizing flow through the dedicated numeric adjust menu.'
+                ],
+                'v2.9.7.17': [
+                    'Fixed native table row action click handling to prevent double execution.',
+                    'Duplicate row from the row menu now creates exactly one duplicate row.',
+                    'Updated startup release notice and version registration for this release.'
+                ],
                 'v2.9.7.16': [
                     'Numeric table actions now open a dedicated mini adjust menu.',
                     'Row height, column width, cell padding and border width support +/- plus manual number input.',
@@ -1327,18 +1357,6 @@ async fetchMessages(roomId) {
                     run: (cell) => this.adjustTableColumnWidth(cell, -20)
                 },
                 {
-                    id: 'row-height-plus',
-                    label: 'row height +',
-                    hint: 'Increase row height',
-                    run: (cell) => this.adjustTableRowHeight(cell, 10)
-                },
-                {
-                    id: 'row-height-minus',
-                    label: 'row height -',
-                    hint: 'Decrease row height',
-                    run: (cell) => this.adjustTableRowHeight(cell, -10)
-                },
-                {
                     id: 'cell-padding-plus',
                     label: 'cell padding +',
                     hint: 'Increase cell padding',
@@ -1464,7 +1482,14 @@ async fetchMessages(roomId) {
             const q = String(this.tableSlashQuery || '').trim().toLowerCase();
             const list = this.getTableSlashCommands();
             if (!q) return list;
-            return list.filter((cmd) => cmd.label.includes(q) || cmd.hint.toLowerCase().includes(q) || cmd.id.includes(q));
+
+            const terms = q.split(/\s+/).filter(Boolean);
+            return list.filter((cmd) => {
+                const haystack = [cmd.label, cmd.hint, cmd.id]
+                    .map((v) => String(v || '').toLowerCase())
+                    .join(' ');
+                return terms.every((term) => haystack.includes(term));
+            });
         },
         openTableSlashHelper(cell, initialQuery = '') {
             if (!cell) return;
@@ -1537,10 +1562,15 @@ async fetchMessages(roomId) {
                 item.className = 'ce-popover-item';
             }
 
-            const icon = document.createElement('span');
-            icon.className = 'ce-popover-item__icon';
-            icon.textContent = '↗';
-            icon.style.marginRight = '8px';
+            const templateIcon = template
+                ? (template.querySelector('.ce-popover-item__icon, .tc-popover__item-icon, svg') || null)
+                : null;
+            const icon = templateIcon ? templateIcon.cloneNode(true) : document.createElement('span');
+            if (!templateIcon) {
+                icon.className = 'ce-popover-item__icon';
+                icon.textContent = '+';
+                icon.style.marginRight = '8px';
+            }
 
             const title = document.createElement('span');
             title.className = 'ce-popover-item__title';
@@ -1556,7 +1586,6 @@ async fetchMessages(roomId) {
                 onRun(cell);
             };
             item.addEventListener('mousedown', runAction);
-            item.addEventListener('click', runAction);
             menuEl.appendChild(item);
         },
         removeStaleNativeTableActions() {
@@ -1568,6 +1597,14 @@ async fetchMessages(roomId) {
                 }
             });
         },
+        closeNativeTableMenus() {
+            const openMenus = Array.from(document.querySelectorAll('.ce-popover, .tc-popover'));
+            openMenus.forEach((menuEl) => {
+                if (!this.getNativeTableMenuType(menuEl)) return;
+                menuEl.remove();
+            });
+            this.removeStaleNativeTableActions();
+        },
         enhanceNativeTableDotsMenu(menuEl) {
             const menuType = this.getNativeTableMenuType(menuEl);
             if (!menuType) return;
@@ -1577,6 +1614,20 @@ async fetchMessages(roomId) {
                 this.addNativeTableMenuAction(menuEl, 'duplicate-row', 'Duplicate row', (cell) => this.duplicateTableRow(cell));
                 this.addNativeTableMenuAction(menuEl, 'move-row-up', 'Move row up', (cell) => this.moveTableRow(cell, 'up'));
                 this.addNativeTableMenuAction(menuEl, 'move-row-down', 'Move row down', (cell) => this.moveTableRow(cell, 'down'));
+                this.addNativeTableMenuAction(menuEl, 'row-height', 'Row height...', (cell) => this.openTableNumberAdjustMenu(cell, {
+                    title: 'Row height',
+                    unit: 'px',
+                    step: 10,
+                    min: 24,
+                    max: 600,
+                    get: (refCell) => {
+                        const pos = this.getTableCellPosition(refCell);
+                        if (!pos) return 42;
+                        const row = pos.rows[pos.rIdx] || [];
+                        return this.getCellPixelSize(row[0], 'height', 42);
+                    },
+                    set: (refCell, value) => this.setTableRowHeight(refCell, value)
+                }));
                 this.addNativeTableMenuAction(menuEl, 'row-background-color', 'Row background color...', (cell) => this.pickTableRowColor(cell));
                 this.addNativeTableMenuAction(menuEl, 'row-background-hex', 'Row background hex...', (cell) => this.promptTableRowColor(cell));
             } else if (menuType === 'column') {
@@ -1683,11 +1734,16 @@ async fetchMessages(roomId) {
             };
 
             this._tableContextMenuOutsideHandler = (event) => {
-                if (!this._tableContextMenuEl) return;
-                if (this._tableContextMenuEl.contains(event.target)) return;
-                if (this._tableNumberAdjustEl && this._tableNumberAdjustEl.contains(event.target)) return;
+                const hasContextMenu = !!this._tableContextMenuEl;
+                const hasNumberAdjust = !!this._tableNumberAdjustEl;
+                if (!hasContextMenu && !hasNumberAdjust) return;
+                const inNativeMenu = !!(event.target && event.target.closest && event.target.closest('.ce-popover, .tc-popover'));
+                if (inNativeMenu) return;
+                if (hasContextMenu && this._tableContextMenuEl.contains(event.target)) return;
+                if (hasNumberAdjust && this._tableNumberAdjustEl.contains(event.target)) return;
                 this.closeTableContextMenu();
                 this.closeTableNumberAdjustMenu();
+                this.closeNativeTableMenus();
             };
 
             this._tableCellSelectStartHandler = (event) => {
@@ -1790,6 +1846,8 @@ async fetchMessages(roomId) {
             this.closeTableSlashHelper();
             this.clearTableSelection();
             this.closeTableContextMenu();
+            this.closeTableNumberAdjustMenu();
+            this.closeNativeTableMenus();
         },
         getEditorTableCellFromTarget(target) {
             const holder = document.getElementById('editorjs');
@@ -2834,10 +2892,12 @@ async fetchMessages(roomId) {
 
             const applyActionFilter = () => {
                 const q = String(searchInput.value || '').trim().toLowerCase();
+                const terms = q.split(/\s+/).filter(Boolean);
                 const items = Array.from(menu.querySelectorAll('button[data-table-action="1"]'));
                 items.forEach((btn) => {
                     const label = String(btn.dataset.searchLabel || '');
-                    btn.style.display = q === '' || label.includes(q) ? 'block' : 'none';
+                    const visible = terms.length === 0 || terms.every((term) => label.includes(term));
+                    btn.style.display = visible ? 'block' : 'none';
                 });
             };
             searchInput.addEventListener('input', applyActionFilter);

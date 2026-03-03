@@ -389,7 +389,9 @@ include 'version.php';
                         <section id="manual-6">
                             <h3 class="text-white font-black uppercase text-xs tracking-[0.2em] mb-3">6. Table Editing: Core Actions</h3>
                             <p>Right-click any table cell to open the table context menu. You can also type <strong>/</strong> inside a table cell to open the Slash Commands popup with search.</p>
-                            <p class="mt-2">Both menus provide the same actions: row/column insert and delete, merge/split, duplicate cell content, row height and column width adjustments, cell padding, background colors, alignment, border styling, table layout mode and table deletion.</p>
+                            <p class="mt-2">Search in both menus supports multiple words; each word is matched independently (order does not matter).</p>
+                            <p class="mt-2">Use <strong>Row height...</strong> from the right-click menu, or from the native row 4-dots menu, for precise row sizing. Row height +/- slash commands were removed to keep sizing in the numeric adjust menu.</p>
+                            <p class="mt-2">Available actions include row/column insert and delete, merge/split, duplicate cell content, column width and cell padding adjustments, colors, alignment, border styling, table layout mode and table deletion.</p>
                             <p class="mt-2">Example slash queries: <code>/radiobutton</code>, <code>/duplicate right</code>, <code>/insert row below</code>.</p>
                             <p class="mt-2">Use <strong>Tab</strong> to move to the next cell. At the end of a row, Tab can create a new row automatically.</p>
                         </section>
