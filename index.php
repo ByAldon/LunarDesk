@@ -11,6 +11,7 @@ include 'version.php';
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA1MTIgNTEyJz48cmVjdCB3aWR0aD0nNTEyJyBoZWlnaHQ9JzUxMicgZmlsbD0nIzI1NjNlYicgcng9JzExNScvPjxwYXRoIGQ9J00gMzUwIDI1NiBBIDExMCAxMTAgMCAxIDEgMjIwIDE0MCBBIDEzMCAxMzAgMCAwIDAgMzUwIDI1NiBaJyBmaWxsPScjOTNjNWZkJyBvcGFjaXR5PScwLjknLz48cGF0aCBkPSdNIDE5MCAxNzAgViAzMzAgSCAzMTAnIGZpbGw9J25vbmUnIHN0cm9rZT0nI2ZmZmZmZicgc3Ryb2tlLXdpZHRoPSc0OCcgc3Ryb2tlLWxpbmVjYXA9J3JvdW5kJyBzdHJva2UtbGluZWpvaW49J3JvdW5kJy8+PC9zdmc+">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@editorjs/editorjs@latest"></script>
@@ -41,7 +42,7 @@ include 'version.php';
                 </div>
                 <span class="font-black text-white uppercase tracking-widest text-sm drop-shadow-md">LunarDesk</span>
             </div>
-            <div class="relative flex items-center gap-3" @click.stop>
+            <div ref="headerMenuRoot" class="relative flex items-center gap-3" @click.stop>
                 <button
                     v-if="currentUser"
                     @click="profileForm = { username: currentUser.username, nickname: currentUser.nickname, email: currentUser.email, password: '' }; showProfileModal = true"
@@ -51,13 +52,10 @@ include 'version.php';
                 </button>
                 <button
                     @click.stop="toggleHeaderMenu"
-                    class="flex items-center justify-center w-11 h-11 bg-slate-800 border border-slate-700 rounded-2xl shadow-xl text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                    class="flex items-center justify-center w-11 h-11 bg-slate-800 border border-slate-700 rounded-2xl text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
                     aria-label="Open menu"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.5 4.75h3l.5 1.8a5.9 5.9 0 011.27.74l1.72-.68 2.12 2.12-.68 1.72c.28.4.53.83.74 1.27l1.8.5v3l-1.8.5a5.9 5.9 0 01-.74 1.27l.68 1.72-2.12 2.12-1.72-.68a5.9 5.9 0 01-1.27.74l-.5 1.8h-3l-.5-1.8a5.9 5.9 0 01-1.27-.74l-1.72.68-2.12-2.12.68-1.72a5.9 5.9 0 01-.74-1.27l-1.8-.5v-3l1.8-.5c.2-.44.46-.87.74-1.27l-.68-1.72 2.12-2.12 1.72.68c.4-.28.83-.53 1.27-.74l.5-1.8z" />
-                        <circle cx="12" cy="12" r="3.1" stroke-width="2" />
-                    </svg>
+                    <i class="fa-solid fa-gear text-base leading-none"></i>
                 </button>
                 <div
                     v-if="showHeaderMenu"

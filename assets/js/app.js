@@ -132,6 +132,10 @@ createApp({
 
         window.addEventListener('mousemove', this.doDrag);
         window.addEventListener('mouseup', this.stopDrag);
+        document.addEventListener('click', this.handleGlobalClick);
+    },
+    beforeUnmount() {
+        document.removeEventListener('click', this.handleGlobalClick);
     },
     methods: {
         getAppVersion() {
@@ -296,6 +300,12 @@ createApp({
             this.showHeaderMenu = !this.showHeaderMenu;
         },
         closeHeaderMenu() {
+            this.showHeaderMenu = false;
+        },
+        handleGlobalClick(e) {
+            if (!this.showHeaderMenu) return;
+            const root = this.$refs.headerMenuRoot;
+            if (root && root.contains(e.target)) return;
             this.showHeaderMenu = false;
         },
         async fetchUser() {
