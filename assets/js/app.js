@@ -98,7 +98,9 @@ createApp({
             editorHistory: [],
             editorHistoryIndex: -1,
             historyBusy: false,
-            editorSessionKey: 0
+            editorSessionKey: 0,
+            silentRefreshTimer: null,
+            silentRefreshInFlight: false
         }
     },
     async created() {
@@ -121,6 +123,26 @@ createApp({
         window.addEventListener('mouseup', this.stopDrag);
     },
     methods: {
+        queueSilentRefresh(delayMs = 300) {
+            if (this.silentRefreshTimer) clearTimeout(this.silentRefreshTimer);
+            this.silentRefreshTimer = setTimeout(() => {
+                this.silentRefreshTimer = null;
+                this.runSilentRefresh();
+            }, delayMs);
+        },
+        async runSilentRefresh() {
+            if (this.silentRefreshInFlight) return;
+            if (this.historyBusy || this._isRestoringHistory) {
+                this.queueSilentRefresh(200);
+                return;
+            }
+            this.silentRefreshInFlight = true;
+            try {
+                await this.fetchData();
+            } finally {
+                this.silentRefreshInFlight = false;
+            }
+        },
         getUiStateStorageKey() {
             return 'lunardesk_ui_state_v1';
         },
@@ -227,7 +249,13 @@ createApp({
                 const data = await this.fetchJson('api.php');
                 if (!Array.isArray(data)) return;
                 this.items = data;
-                if (this.activePage && !this.needsSave) {
+                const canPatchActivePage =
+                    this.activePage &&
+                    !this.needsSave &&
+                    !this.saveInFlight &&
+                    !this.historyBusy &&
+                    !this._isRestoringHistory;
+                if (canPatchActivePage) {
                     const updated = data.find(i => i.id === this.activePage.id);
                     if (updated) {
                         const useDraft = Number(updated.has_draft) === 1;
@@ -418,6 +446,10 @@ async fetchMessages(roomId) {
             }, 100);
             this.loading = false;
             this.saveUiState();
+            if (this.silentRefreshTimer) {
+                clearTimeout(this.silentRefreshTimer);
+                this.silentRefreshTimer = null;
+            }
         },
         async autoSave() {
             if (!this.activePage || !globalEditorInstance || this.isPublishing) return;
@@ -454,6 +486,7 @@ async fetchMessages(roomId) {
                         this.items[idx].draft_content = str;
                         this.items[idx].draft_cover_image = pageSnapshot.cover_image;
                     }
+                    this.queueSilentRefresh(350);
                 }
             } catch (e) {
                 this.needsSave = true;
@@ -503,7 +536,7 @@ async fetchMessages(roomId) {
             } finally {
                 this.isPublishing = false;
             }
-            await this.fetchData(); 
+            await this.runSilentRefresh();
             this.loading = false;
         },
         showPublishNotice(message) {
@@ -2126,19 +2159,21 @@ async fetchMessages(roomId) {
 
                 const firstRow = rows[0] || [];
                 firstRow.forEach((cell, cIdx) => {
-                    const width = this.getCellPixelSize(cell, 'width', 0);
+                    // Persist only explicit user-set widths, not measured layout widths.
                     const styled = parseFloat(cell.style.width || '');
-                    const val = styled > 0 ? styled : width;
-                    if (Number.isFinite(val) && val > 0) columnWidths[cIdx] = Math.round(val);
+                    if (Number.isFinite(styled) && styled > 0) {
+                        columnWidths[cIdx] = Math.round(styled);
+                    }
                 });
 
                 rows.forEach((row, rIdx) => {
                     const first = row[0];
                     if (!first) return;
-                    const height = this.getCellPixelSize(first, 'height', 0);
+                    // Persist only explicit user-set heights, not measured layout heights.
                     const styled = parseFloat(first.style.height || '');
-                    const val = styled > 0 ? styled : height;
-                    if (Number.isFinite(val) && val > 0) rowHeights[rIdx] = Math.round(val);
+                    if (Number.isFinite(styled) && styled > 0) {
+                        rowHeights[rIdx] = Math.round(styled);
+                    }
                 });
 
                 if (!block.data) block.data = {};
