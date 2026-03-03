@@ -137,16 +137,32 @@ $metaText = implode(' ', $metaParts);
             cloned.blocks = cloned.blocks.map((block) => {
                 if (!block || block.type !== 'table') return block;
                 const data = block.data && typeof block.data === 'object' ? block.data : {};
+                const styles = data.ld_styles && typeof data.ld_styles === 'object' ? data.ld_styles : {};
                 const sourceRows = Array.isArray(data.content) ? data.content : [];
                 const rows = sourceRows.map((row) => {
                     if (!Array.isArray(row)) return [];
                     return row.map((cell) => (cell == null ? '' : String(cell)));
                 });
-                const maxCols = rows.reduce((m, r) => Math.max(m, r.length), 0);
+                const columnWidths = styles.columnWidths && typeof styles.columnWidths === 'object' ? styles.columnWidths : {};
+                const rowHeights = styles.rowHeights && typeof styles.rowHeights === 'object' ? styles.rowHeights : {};
+                const maxColsFromContent = rows.reduce((m, r) => Math.max(m, r.length), 0);
+                const maxColsFromStyles = Object.keys(columnWidths).reduce((m, key) => {
+                    const idx = Number(key);
+                    return Number.isFinite(idx) ? Math.max(m, idx + 1) : m;
+                }, 0);
+                const maxCols = Math.max(maxColsFromContent, maxColsFromStyles, 0);
+
+                const maxRowsFromStyles = Object.keys(rowHeights).reduce((m, key) => {
+                    const idx = Number(key);
+                    return Number.isFinite(idx) ? Math.max(m, idx + 1) : m;
+                }, 0);
+                const targetRows = Math.max(rows.length, maxRowsFromStyles, 0);
+                while (rows.length < targetRows) rows.push([]);
+
                 if (maxCols > 0) {
-                    rows.forEach((row) => {
-                        while (row.length < maxCols) row.push('');
-                    });
+                    for (let r = 0; r < rows.length; r++) {
+                        while (rows[r].length < maxCols) rows[r].push('');
+                    }
                 }
                 return { ...block, data: { ...data, content: rows } };
             });
@@ -206,7 +222,7 @@ $metaText = implode(' ', $metaParts);
         };
         const buildFallbackTable = (block) => {
             const data = block && block.data && typeof block.data === 'object' ? block.data : {};
-            const rows = Array.isArray(data.content) ? data.content : [];
+            const rows = Array.isArray(data.content) ? data.content.map((row) => Array.isArray(row) ? [...row] : []) : [];
             const styles = data.ld_styles && typeof data.ld_styles === 'object' ? data.ld_styles : {};
             const cellMerges = styles.cellMerges || {};
             const colors = styles.cellColors || {};
@@ -218,7 +234,20 @@ $metaText = implode(' ', $metaParts);
             const columnWidths = styles.columnWidths || {};
             const rowHeights = styles.rowHeights || {};
             const tableOptions = styles.tableOptions || {};
-            const maxCols = rows.reduce((m, r) => Math.max(m, Array.isArray(r) ? r.length : 0), 0);
+            const maxColsFromRows = rows.reduce((m, r) => Math.max(m, Array.isArray(r) ? r.length : 0), 0);
+            const maxColsFromStyles = Object.keys(columnWidths).reduce((m, key) => {
+                const idx = Number(key);
+                return Number.isFinite(idx) ? Math.max(m, idx + 1) : m;
+            }, 0);
+            const maxCols = Math.max(maxColsFromRows, maxColsFromStyles, 0);
+            const maxRowsFromStyles = Object.keys(rowHeights).reduce((m, key) => {
+                const idx = Number(key);
+                return Number.isFinite(idx) ? Math.max(m, idx + 1) : m;
+            }, 0);
+            while (rows.length < maxRowsFromStyles) rows.push([]);
+            rows.forEach((row) => {
+                while (row.length < maxCols) row.push('');
+            });
             const occupied = new Set();
 
             const wrap = document.createElement('div');
