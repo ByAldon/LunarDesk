@@ -7,8 +7,10 @@ include 'version.php';
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>LunarDesk <?php echo $app_version; ?></title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA1MTIgNTEyJz48cmVjdCB3aWR0aD0nNTEyJyBoZWlnaHQ9JzUxMicgZmlsbD0nIzI1NjNlYicgcng9JzExNScvPjxwYXRoIGQ9J00gMzUwIDI1NiBBIDExMCAxMTAgMCAxIDEgMjIwIDE0MCBBIDEzMCAxMzAgMCAwIDAgMzUwIDI1NiBaJyBmaWxsPScjOTNjNWZkJyBvcGFjaXR5PScwLjknLz48cGF0aCBkPSdNIDE5MCAxNzAgViAzMzAgSCAzMTAnIGZpbGw9J25vbmUnIHN0cm9rZT0nI2ZmZmZmZicgc3Ryb2tlLXdpZHRoPSc0OCcgc3Ryb2tlLWxpbmVjYXA9J3JvdW5kJyBzdHJva2UtbGluZWpvaW49J3JvdW5kJy8+PC9zdmc+">
+    <title>LunarDesk</title>
+    <link rel="icon" type="image/x-icon" href="icon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer">
@@ -37,9 +39,9 @@ include 'version.php';
         
         <header class="h-20 shrink-0 flex items-center justify-between px-8 z-30 relative bg-transparent">
             <div class="flex items-center gap-4">
-                <div class="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-500/20">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="w-6 h-6"><path d="M 350 256 A 110 110 0 1 1 220 140 A 130 130 0 0 0 350 256 Z" fill="#93c5fd" opacity="0.9"/><path d="M 190 170 V 330 H 310" fill='none' stroke='#ffffff' stroke-width='48' stroke-linecap='round' stroke-linejoin='round'/></svg>
-                </div>
+                <div class="p-2">
+    <img src="icon.png" class="w-8 h-8 object-contain">
+</div>
                 <span class="font-black text-white uppercase tracking-widest text-sm drop-shadow-md">LunarDesk</span>
             </div>
             <div ref="headerMenuRoot" class="relative flex items-center gap-3" @click.stop>
